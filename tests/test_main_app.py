@@ -5,7 +5,7 @@ import os
 import tempfile
 import pytest
 import yaml
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 
 from main import HealthMonitorApp, main
@@ -274,9 +274,9 @@ class TestMainFunction:
         with patch('sys.argv', ['main.py', temp_config_file]):
             with patch('main.app') as mock_app:
                 mock_app_instance = MagicMock()
-                mock_app_instance.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-                mock_app_instance.start = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-                mock_app_instance.stop = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+                mock_app_instance.initialize = AsyncMock()
+                mock_app_instance.start = AsyncMock()
+                mock_app_instance.stop = AsyncMock()
                 
                 with patch('main.HealthMonitorApp', return_value=mock_app_instance):
                     # 由于main函数会无限运行，我们需要模拟KeyboardInterrupt
@@ -318,7 +318,7 @@ class TestMainFunction:
             with patch('main.HealthMonitorApp') as mock_app_class:
                 mock_app_instance = MagicMock()
                 mock_app_instance.initialize.side_effect = ConfigError("测试配置错误")
-                mock_app_instance.stop.return_value = asyncio.coroutine(lambda: None)()
+                mock_app_instance.stop = AsyncMock()
                 mock_app_class.return_value = mock_app_instance
                 
                 with patch('sys.exit') as mock_exit:

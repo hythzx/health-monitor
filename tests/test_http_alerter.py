@@ -126,7 +126,7 @@ class TestHTTPAlerter:
         alerter.method = 'POST'
         alerter.max_retries = 3
         alerter.retry_delay = 1.0
-        alerter.template = '{"invalid": json}'
+        alerter.template = '   '  # 只有空格的模板应该验证失败
         alerter.logger = Mock()
         
         assert alerter.validate_config() is False
@@ -206,6 +206,7 @@ class TestHTTPAlerter:
         mock_response = Mock()
         mock_response.status = 200
         mock_response.text = AsyncMock(return_value='OK')
+        mock_response.json = AsyncMock(return_value={'status': 'success'})
         
         # 创建异步上下文管理器
         mock_request_context = AsyncMock()

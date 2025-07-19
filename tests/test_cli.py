@@ -5,7 +5,7 @@ import tempfile
 import pytest
 import yaml
 import asyncio
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 
 from main import (
@@ -325,10 +325,8 @@ class TestHealthCheck:
         
         with patch('main.HealthMonitorApp') as mock_app_class:
             mock_app = MagicMock()
-            mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-            mock_app.monitor_scheduler.check_all_services_now = MagicMock(
-                return_value=asyncio.coroutine(lambda: mock_results)()
-            )
+            mock_app.initialize = AsyncMock()
+            mock_app.monitor_scheduler.check_all_services_now = AsyncMock(return_value=mock_results)
             mock_app_class.return_value = mock_app
             
             with patch('builtins.print') as mock_print:
@@ -360,10 +358,8 @@ class TestHealthCheck:
         
         with patch('main.HealthMonitorApp') as mock_app_class:
             mock_app = MagicMock()
-            mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-            mock_app.monitor_scheduler.check_all_services_now = MagicMock(
-                return_value=asyncio.coroutine(lambda: mock_results)()
-            )
+            mock_app.initialize = AsyncMock()
+            mock_app.monitor_scheduler.check_all_services_now = AsyncMock(return_value=mock_results)
             mock_app_class.return_value = mock_app
             
             with patch('builtins.print') as mock_print:
@@ -427,7 +423,7 @@ class TestMainFunction:
         """测试主函数告警测试模式"""
         with patch('sys.argv', ['health-monitor', '--test-alerts', config_file]):
             with patch('sys.exit') as mock_exit:
-                with patch('main.run_alert_test', return_value=asyncio.coroutine(lambda: True)()) as mock_test:
+                with patch('main.run_alert_test', new_callable=AsyncMock, return_value=True) as mock_test:
                     mock_exit.side_effect = SystemExit(0)
                     
                     with pytest.raises(SystemExit):
@@ -441,7 +437,7 @@ class TestMainFunction:
         """测试主函数单次检查模式"""
         with patch('sys.argv', ['health-monitor', '--check-once', config_file]):
             with patch('sys.exit') as mock_exit:
-                with patch('main.check_once', return_value=asyncio.coroutine(lambda: True)()) as mock_check:
+                with patch('main.check_once', new_callable=AsyncMock, return_value=True) as mock_check:
                     mock_exit.side_effect = SystemExit(0)
                     
                     with pytest.raises(SystemExit):
@@ -480,9 +476,9 @@ class TestMainFunction:
         with patch('sys.argv', ['health-monitor', '--log-level', 'DEBUG', config_file]):
             with patch('main.HealthMonitorApp') as mock_app_class:
                 mock_app = MagicMock()
-                mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+                mock_app.initialize = AsyncMock()
                 mock_app.start = MagicMock(side_effect=KeyboardInterrupt())
-                mock_app.stop = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+                mock_app.stop = AsyncMock()
                 mock_app._configure_logging = MagicMock()
                 mock_app_class.return_value = mock_app
                 
@@ -497,9 +493,9 @@ class TestMainFunction:
         with patch('sys.argv', ['health-monitor', config_file]):
             with patch('main.HealthMonitorApp') as mock_app_class:
                 mock_app = MagicMock()
-                mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+                mock_app.initialize = AsyncMock()
                 mock_app.start = MagicMock(side_effect=KeyboardInterrupt())
-                mock_app.stop = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+                mock_app.stop = AsyncMock()
                 mock_app_class.return_value = mock_app
                 
                 with patch('builtins.print') as mock_print:

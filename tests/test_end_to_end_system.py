@@ -651,17 +651,15 @@ class TestEndToEndSystem:
         ]
         
         for result in test_results:
-            state_manager1.update_service_state(result)
+            state_manager1.update_state(result)
         
-        # 保存状态
-        state_manager1.save_state()
+        # 状态会自动保存，无需手动调用
         
         # 获取当前状态
         states1 = state_manager1.get_all_states()
         
-        # 第二阶段：创建新的状态管理器并加载状态
+        # 第二阶段：创建新的状态管理器（会自动加载状态）
         state_manager2 = StateManager(temp_state_file)
-        state_manager2.load_state()
         
         # 获取加载的状态
         states2 = state_manager2.get_all_states()
@@ -671,12 +669,7 @@ class TestEndToEndSystem:
         
         for service_name in states1:
             assert service_name in states2
-            state1 = states1[service_name]
-            state2 = states2[service_name]
-            
-            assert state1.service_name == state2.service_name
-            assert state1.is_healthy == state2.is_healthy
-            assert state1.service_type == state2.service_type
+            assert states1[service_name] == states2[service_name]
         
         print(f"✅ 状态持久化测试通过")
         print(f"   保存状态数量: {len(states1)}")
