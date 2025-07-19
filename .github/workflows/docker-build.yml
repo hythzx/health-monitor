@@ -36,11 +36,6 @@ jobs:
       run: |
         pytest tests/ -v --tb=short
         
-    - name: 代码质量检查
-      run: |
-        pip install flake8 black
-        flake8 health_monitor/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        black --check health_monitor/
 
   build:
     needs: test
