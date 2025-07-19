@@ -236,10 +236,8 @@ class TestAlertTesting:
         """测试告警系统测试成功"""
         with patch('main.HealthMonitorApp') as mock_app_class:
             mock_app = MagicMock()
-            mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-            mock_app.alert_integrator.test_alert_system = MagicMock(
-                return_value=asyncio.coroutine(lambda: True)()
-            )
+            mock_app.initialize = AsyncMock()
+            mock_app.alert_integrator.test_alert_system = AsyncMock(return_value=True)
             mock_app_class.return_value = mock_app
             
             with patch('builtins.print') as mock_print:
@@ -256,10 +254,8 @@ class TestAlertTesting:
         """测试告警系统测试失败"""
         with patch('main.HealthMonitorApp') as mock_app_class:
             mock_app = MagicMock()
-            mock_app.initialize = MagicMock(return_value=asyncio.coroutine(lambda: None)())
-            mock_app.alert_integrator.test_alert_system = MagicMock(
-                return_value=asyncio.coroutine(lambda: False)()
-            )
+            mock_app.initialize = AsyncMock()
+            mock_app.alert_integrator.test_alert_system = AsyncMock(return_value=False)
             mock_app_class.return_value = mock_app
             
             with patch('builtins.print') as mock_print:
