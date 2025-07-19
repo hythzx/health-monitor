@@ -3,19 +3,16 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Any, Optional, List, Callable, Union
-from dataclasses import dataclass, field
-from enum import Enum
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Any, Optional, List, Callable
 
+from .error_handler import global_error_handler
 from .exceptions import (
-    HealthMonitorError,
     ErrorCode,
-    ConfigError,
-    CheckerError,
-    AlertError
+    CheckerError
 )
-from .error_handler import retry_on_error, handle_errors, global_error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +60,11 @@ class CircuitBreaker:
     failure_count: int = 0
     last_failure_time: float = 0
     success_count: int = 0
-    
+
     def should_allow_request(self) -> bool:
         """判断是否允许请求"""
         current_time = time.time()
-        
+
         if self.state == CircuitBreakerState.CLOSED:
             return True
         elif self.state == CircuitBreakerState.OPEN:
@@ -79,9 +76,9 @@ class CircuitBreaker:
             return False
         elif self.state == CircuitBreakerState.HALF_OPEN:
             return self.success_count < self.config.half_open_max_calls
-        
+
         return False
-    
+
     def record_success(self):
         """记录成功"""
         if self.state == CircuitBreakerState.HALF_OPEN:
@@ -92,12 +89,12 @@ class CircuitBreaker:
                 logger.info(f"熔断器 {self.name} 恢复到关闭状态")
         elif self.state == CircuitBreakerState.CLOSED:
             self.failure_count = 0
-    
+
     def record_failure(self):
         """记录失败"""
         self.failure_count += 1
         self.last_failure_time = time.time()
-        
+
         if self.state == CircuitBreakerState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:
                 self.state = CircuitBreakerState.OPEN
@@ -109,62 +106,63 @@ class CircuitBreaker:
 
 class ResilienceManager:
     """容错管理器"""
-    
+
     def __init__(self):
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
         self.fallback_configs: Dict[str, FallbackConfig] = {}
         self.service_states: Dict[str, ServiceState] = {}
         self.failure_counts: Dict[str, List[float]] = {}
-        
+
     def register_circuit_breaker(
-        self,
-        name: str,
-        config: CircuitBreakerConfig
+            self,
+            name: str,
+            config: CircuitBreakerConfig
     ) -> CircuitBreaker:
         """注册熔断器"""
         circuit_breaker = CircuitBreaker(name, config)
         self.circuit_breakers[name] = circuit_breaker
         logger.info(f"注册熔断器: {name}")
         return circuit_breaker
-    
+
     def register_fallback(
-        self,
-        name: str,
-        config: FallbackConfig
+            self,
+            name: str,
+            config: FallbackConfig
     ):
         """注册降级配置"""
         self.fallback_configs[name] = config
         logger.info(f"注册降级配置: {name}")
-    
+
     def get_circuit_breaker(self, name: str) -> Optional[CircuitBreaker]:
         """获取熔断器"""
         return self.circuit_breakers.get(name)
-    
+
     def get_fallback_config(self, name: str) -> Optional[FallbackConfig]:
         """获取降级配置"""
         return self.fallback_configs.get(name)
-    
+
     def update_service_state(self, service_name: str, state: ServiceState):
         """更新服务状态"""
         old_state = self.service_states.get(service_name, ServiceState.UNKNOWN)
         self.service_states[service_name] = state
-        
+
         if old_state != state:
-            logger.info(f"服务 {service_name} 状态变更: {old_state.value} -> {state.value}")
-    
+            logger.info(
+                f"服务 {service_name} 状态变更: {old_state.value} -> {state.value}")
+
     def get_service_state(self, service_name: str) -> ServiceState:
         """获取服务状态"""
         return self.service_states.get(service_name, ServiceState.UNKNOWN)
-    
+
     def record_failure(self, service_name: str):
         """记录服务失败"""
         current_time = time.time()
-        
+
         if service_name not in self.failure_counts:
             self.failure_counts[service_name] = []
-        
+
         self.failure_counts[service_name].append(current_time)
-        
+
         # 清理过期的失败记录
         fallback_config = self.get_fallback_config(service_name)
         if fallback_config:
@@ -172,33 +170,33 @@ class ResilienceManager:
             self.failure_counts[service_name] = [
                 t for t in self.failure_counts[service_name] if t >= window_start
             ]
-            
+
             # 检查是否需要降级
             if len(self.failure_counts[service_name]) >= fallback_config.max_failures:
                 self.update_service_state(service_name, ServiceState.DEGRADED)
-    
+
     def should_use_fallback(self, service_name: str) -> bool:
         """判断是否应该使用降级"""
         fallback_config = self.get_fallback_config(service_name)
         if not fallback_config or not fallback_config.enabled:
             return False
-        
+
         service_state = self.get_service_state(service_name)
         return service_state in [ServiceState.DEGRADED, ServiceState.UNHEALTHY]
-    
+
     def get_fallback_value(self, service_name: str) -> Any:
         """获取降级值"""
         fallback_config = self.get_fallback_config(service_name)
         if not fallback_config:
             return None
-        
+
         if fallback_config.fallback_function:
             try:
                 return fallback_config.fallback_function()
             except Exception as e:
                 logger.error(f"降级函数执行失败: {str(e)}")
                 return fallback_config.fallback_value
-        
+
         return fallback_config.fallback_value
 
 
@@ -207,10 +205,10 @@ global_resilience_manager = ResilienceManager()
 
 
 def with_circuit_breaker(
-    name: str,
-    failure_threshold: int = 5,
-    recovery_timeout: int = 60,
-    half_open_max_calls: int = 3
+        name: str,
+        failure_threshold: int = 5,
+        recovery_timeout: int = 60,
+        half_open_max_calls: int = 3
 ):
     """熔断器装饰器"""
     config = CircuitBreakerConfig(
@@ -218,9 +216,9 @@ def with_circuit_breaker(
         recovery_timeout=recovery_timeout,
         half_open_max_calls=half_open_max_calls
     )
-    
+
     circuit_breaker = global_resilience_manager.register_circuit_breaker(name, config)
-    
+
     def decorator(func):
         if asyncio.iscoroutinefunction(func):
             async def async_wrapper(*args, **kwargs):
@@ -230,7 +228,7 @@ def with_circuit_breaker(
                         ErrorCode.SERVICE_UNAVAILABLE,
                         recoverable=False
                     )
-                
+
                 try:
                     result = await func(*args, **kwargs)
                     circuit_breaker.record_success()
@@ -238,7 +236,7 @@ def with_circuit_breaker(
                 except Exception as e:
                     circuit_breaker.record_failure()
                     raise
-            
+
             return async_wrapper
         else:
             def sync_wrapper(*args, **kwargs):
@@ -248,7 +246,7 @@ def with_circuit_breaker(
                         ErrorCode.SERVICE_UNAVAILABLE,
                         recoverable=False
                     )
-                
+
                 try:
                     result = func(*args, **kwargs)
                     circuit_breaker.record_success()
@@ -256,18 +254,18 @@ def with_circuit_breaker(
                 except Exception as e:
                     circuit_breaker.record_failure()
                     raise
-            
+
             return sync_wrapper
-    
+
     return decorator
 
 
 def with_fallback(
-    service_name: str,
-    fallback_value: Any = None,
-    fallback_function: Optional[Callable] = None,
-    max_failures: int = 5,
-    failure_window: int = 300
+        service_name: str,
+        fallback_value: Any = None,
+        fallback_function: Optional[Callable] = None,
+        max_failures: int = 5,
+        failure_window: int = 300
 ):
     """降级装饰器"""
     config = FallbackConfig(
@@ -277,9 +275,9 @@ def with_fallback(
         max_failures=max_failures,
         failure_window=failure_window
     )
-    
+
     global_resilience_manager.register_fallback(service_name, config)
-    
+
     def decorator(func):
         if asyncio.iscoroutinefunction(func):
             async def async_wrapper(*args, **kwargs):
@@ -287,7 +285,7 @@ def with_fallback(
                 if global_resilience_manager.should_use_fallback(service_name):
                     logger.warning(f"服务 {service_name} 使用降级响应")
                     return global_resilience_manager.get_fallback_value(service_name)
-                
+
                 try:
                     result = await func(*args, **kwargs)
                     # 成功时重置服务状态
@@ -297,18 +295,19 @@ def with_fallback(
                     return result
                 except Exception as e:
                     # 先检查当前失败次数，决定是否应该抛出异常
-                    current_failures = len(global_resilience_manager.failure_counts.get(service_name, []))
-                    
+                    current_failures = len(
+                        global_resilience_manager.failure_counts.get(service_name, []))
+
                     # 记录失败
                     global_resilience_manager.record_failure(service_name)
-                    
+
                     # 如果现在应该使用降级，返回降级值
                     if global_resilience_manager.should_use_fallback(service_name):
                         logger.warning(f"服务 {service_name} 失败后使用降级响应")
                         return global_resilience_manager.get_fallback_value(service_name)
-                    
+
                     raise
-            
+
             return async_wrapper
         else:
             def sync_wrapper(*args, **kwargs):
@@ -316,7 +315,7 @@ def with_fallback(
                 if global_resilience_manager.should_use_fallback(service_name):
                     logger.warning(f"服务 {service_name} 使用降级响应")
                     return global_resilience_manager.get_fallback_value(service_name)
-                
+
                 try:
                     result = func(*args, **kwargs)
                     # 成功时重置服务状态
@@ -326,20 +325,21 @@ def with_fallback(
                     return result
                 except Exception as e:
                     # 先检查当前失败次数，决定是否应该抛出异常
-                    current_failures = len(global_resilience_manager.failure_counts.get(service_name, []))
-                    
+                    current_failures = len(
+                        global_resilience_manager.failure_counts.get(service_name, []))
+
                     # 记录失败
                     global_resilience_manager.record_failure(service_name)
-                    
+
                     # 如果现在应该使用降级，返回降级值
                     if global_resilience_manager.should_use_fallback(service_name):
                         logger.warning(f"服务 {service_name} 失败后使用降级响应")
                         return global_resilience_manager.get_fallback_value(service_name)
-                    
+
                     raise
-            
+
             return sync_wrapper
-    
+
     return decorator
 
 
@@ -367,17 +367,17 @@ async def async_graceful_degradation(service_name: str, default_value: Any = Non
 
 class PartialFailureHandler:
     """部分失败处理器"""
-    
+
     def __init__(self, continue_on_partial_failure: bool = True):
         self.continue_on_partial_failure = continue_on_partial_failure
         self.failed_services: List[str] = []
         self.successful_services: List[str] = []
-    
+
     def handle_service_result(
-        self,
-        service_name: str,
-        success: bool,
-        error: Optional[Exception] = None
+            self,
+            service_name: str,
+            success: bool,
+            error: Optional[Exception] = None
     ):
         """处理服务结果"""
         if success:
@@ -385,16 +385,17 @@ class PartialFailureHandler:
             logger.debug(f"服务 {service_name} 检查成功")
         else:
             self.failed_services.append(service_name)
-            logger.warning(f"服务 {service_name} 检查失败: {str(error) if error else '未知错误'}")
-    
+            logger.warning(
+                f"服务 {service_name} 检查失败: {str(error) if error else '未知错误'}")
+
     def should_continue(self) -> bool:
         """判断是否应该继续"""
         if not self.continue_on_partial_failure:
             return len(self.failed_services) == 0
-        
+
         # 如果有成功的服务，继续运行
         return len(self.successful_services) > 0 or len(self.failed_services) == 0
-    
+
     def get_summary(self) -> Dict[str, Any]:
         """获取执行摘要"""
         total = len(self.successful_services) + len(self.failed_services)
@@ -410,45 +411,48 @@ class PartialFailureHandler:
 
 def setup_resilience_recovery_handlers():
     """设置容错相关的恢复处理器"""
-    
+
     def handle_network_error(error: Exception, context: Dict[str, Any]) -> Optional[Any]:
         """处理网络错误"""
         service_name = context.get('service_name', 'unknown')
         logger.info(f"尝试恢复网络错误，服务: {service_name}")
-        
+
         # 记录失败并检查是否需要降级
         global_resilience_manager.record_failure(service_name)
-        
+
         if global_resilience_manager.should_use_fallback(service_name):
             return global_resilience_manager.get_fallback_value(service_name)
-        
+
         return None
-    
-    def handle_service_unavailable(error: Exception, context: Dict[str, Any]) -> Optional[Any]:
+
+    def handle_service_unavailable(error: Exception, context: Dict[str, Any]) -> Optional[
+        Any]:
         """处理服务不可用错误"""
         service_name = context.get('service_name', 'unknown')
         logger.info(f"服务不可用，尝试降级处理: {service_name}")
-        
-        global_resilience_manager.update_service_state(service_name, ServiceState.UNHEALTHY)
-        
+
+        global_resilience_manager.update_service_state(service_name,
+                                                       ServiceState.UNHEALTHY)
+
         if global_resilience_manager.should_use_fallback(service_name):
             return global_resilience_manager.get_fallback_value(service_name)
-        
+
         return None
-    
+
     # 注册恢复处理器
     global_error_handler.register_recovery_handler(ConnectionError, handle_network_error)
     global_error_handler.register_recovery_handler(TimeoutError, handle_network_error)
     global_error_handler.register_recovery_handler(OSError, handle_network_error)
-    
+
     # 注册CheckerError的恢复处理器
-    def handle_checker_error(error: CheckerError, context: Dict[str, Any]) -> Optional[Any]:
+    def handle_checker_error(error: CheckerError, context: Dict[str, Any]) -> Optional[
+        Any]:
         if error.error_code == ErrorCode.SERVICE_UNAVAILABLE:
             return handle_service_unavailable(error, context)
         elif error.error_code in [ErrorCode.CONNECTION_ERROR, ErrorCode.TIMEOUT_ERROR]:
             return handle_network_error(error, context)
         return None
-    
+
     global_error_handler.register_recovery_handler(CheckerError, handle_checker_error)
 
 

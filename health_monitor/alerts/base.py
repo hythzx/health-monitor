@@ -2,12 +2,13 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
+
 from ..models.health_check import AlertMessage
 
 
 class BaseAlerter(ABC):
     """告警器抽象基类"""
-    
+
     def __init__(self, name: str, config: Dict[str, Any]):
         """
         初始化告警器
@@ -19,7 +20,7 @@ class BaseAlerter(ABC):
         self.name = name
         self.config = config
         self.alerter_type = self.__class__.__name__.replace('Alerter', '').lower()
-    
+
     @abstractmethod
     async def send_alert(self, message: AlertMessage) -> bool:
         """
@@ -32,7 +33,7 @@ class BaseAlerter(ABC):
             bool: 发送是否成功
         """
         pass
-    
+
     @abstractmethod
     def validate_config(self) -> bool:
         """
@@ -42,7 +43,7 @@ class BaseAlerter(ABC):
             bool: 配置是否有效
         """
         pass
-    
+
     def get_timeout(self) -> int:
         """
         获取超时时间配置
