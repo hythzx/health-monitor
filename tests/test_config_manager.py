@@ -95,10 +95,10 @@ global:
 services:
   test-service:
     host: localhost
-    # 缺少type字段
+    # missing type field
 """
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
             f.write(config_content)
             config_path = f.name
         
