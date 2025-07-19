@@ -1,0 +1,175 @@
+# 生产环境配置模板
+# 针对生产环境优化的配置，注重稳定性和可靠性
+
+global:
+  check_interval: 60        # 生产环境检查间隔稍长，减少系统负载
+  log_level: WARNING        # 生产环境只记录警告和错误
+  log_file: /var/log/health-monitor/production.log
+  log_max_size: 500         # 更大的日志文件
+  log_backup_count: 10      # 保留更多日志文件
+
+services:
+  # 主数据库 - 高频率监控
+  primary-database:
+    type: mysql
+    host: db-primary.internal
+    port: 3306
+    username: monitor_user
+    password: "${DB_MONITOR_PASSWORD}"  # 使用环境变量
+    database: production
+    timeout: 15               # 生产环境超时时间更长
+    check_interval: 30        # 关键服务检查更频繁
+    test_queries: false       # 生产环境避免额外查询
+    collect_status: true      # 收集状态用于监控
+    test_database_access: true
+
+  # 只读副本数据库
+  readonly-database:
+    type: mysql
+    host: db-readonly.internal
+    port: 3306
+    username: readonly_monitor
+    password: "${DB_READONLY_PASSWORD}"
+    database: production
+    timeout: 10
+    check_interval: 60        # 副本检查频率可以低一些
+    test_queries: false
+    collect_status: false
+    test_database_access: true
+
+  # Redis集群
+  redis-cluster:
+    type: redis
+    host: redis-cluster.internal
+    port: 6379
+    password: "${REDIS_PASSWORD}"
+    database: 0
+    timeout: 10
+    check_interval: 30
+    test_operations: false    # 生产环境不执行写操作测试
+    collect_info: true
+
+  # 消息队列
+  message-queue:
+    type: emqx
+    host: mq-cluster.internal
+    port: 1883
+    username: monitor_user
+    password: "${MQ_PASSWORD}"
+    client_id: health_monitor_prod
+    timeout: 20
+    check_interval: 45
+    check_method: http        # 使用HTTP API，避免MQTT连接开销
+    api_port: 18083
+    api_username: admin
+    api_password: "${MQ_API_PASSWORD}"
+    collect_stats: true
+
+  # 核心API服务
+  core-api:
+    type: restful
+    url: https://api.internal/health
+    method: GET
+    timeout: 15
+    check_interval: 30
+    headers:
+      Authorization: "Bearer ${API_MONITOR_TOKEN}"
+      User-Agent: "HealthMonitor-Prod/1.0"
+    expected_status: 200
+    expected_content: "healthy"
+    validate_json: true
+    required_json_fields:
+      - status
+      - timestamp
+    collect_response_stats: true
+
+  # 用户服务API
+  user-service:
+    type: restful
+    url: https://user-service.internal/health
+    method: GET
+    timeout: 12
+    check_interval: 45
+    headers:
+      X-API-Key: "${USER_SERVICE_API_KEY}"
+    expected_status: 200
+    validate_json: true
+    collect_response_stats: false
+
+  # 外部支付服务
+  payment-gateway:
+    type: restful
+    url: https://payment-api.external.com/status
+    method: GET
+    timeout: 30               # 外部服务超时时间更长
+    check_interval: 300       # 外部服务检查频率更低
+    headers:
+      Authorization: "Bearer ${PAYMENT_API_TOKEN}"
+    expected_status: [200, 202]
+    collect_response_stats: false
+
+alerts:
+  # 主要告警渠道 - 钉钉
+  - name: primary-dingtalk
+    type: http
+    url: "${DINGTALK_WEBHOOK_URL}"
+    method: POST
+    timeout: 15
+    max_retries: 5            # 生产环境更多重试
+    retry_delay: 2.0
+    retry_backoff: 1.5
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 生产环境告警\n\n服务: {{service_name}}\n类型: {{service_type}}\n状态: {{status}}\n时间: {{timestamp}}\n响应时间: {{response_time}}ms\n错误: {{error_message}}\n\n@所有人 请立即处理！"
+        }
+      }
+
+  # 备用告警渠道 - 企业微信
+  - name: backup-wechat
+    type: http
+    url: "${WECHAT_WEBHOOK_URL}"
+    method: POST
+    timeout: 15
+    max_retries: 3
+    retry_delay: 1.0
+    retry_backoff: 2.0
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "markdown",
+        "markdown": {
+          "content": "## 🚨 生产环境告警\n\n**服务**: {{service_name}}\n**类型**: {{service_type}}\n**状态**: <font color=\"warning\">{{status}}</font>\n**时间**: {{timestamp}}\n**响应时间**: {{response_time}}ms\n**错误**: {{error_message}}"
+        }
+      }
+
+  # 邮件告警（严重问题）
+  - name: email-critical
+    type: http
+    url: "${EMAIL_API_URL}"
+    method: POST
+    timeout: 30
+    max_retries: 3
+    retry_delay: 5.0
+    retry_backoff: 2.0
+    headers:
+      Authorization: "Bearer ${EMAIL_API_TOKEN}"
+      Content-Type: "application/json"
+    template: |
+      {
+        "to": ["ops-team@company.com", "on-call@company.com"],
+        "subject": "🚨 CRITICAL: Production Service Alert - {{service_name}}",
+        "html": "<h2>Production Service Alert</h2><p><strong>Service:</strong> {{service_name}} ({{service_type}})</p><p><strong>Status:</strong> {{status}}</p><p><strong>Time:</strong> {{timestamp}}</p><p><strong>Response Time:</strong> {{response_time}}ms</p><p><strong>Error:</strong> {{error_message}}</p><p>Please investigate immediately.</p>"
+      }
+
+# 生产环境注意事项：
+# 1. 所有敏感信息使用环境变量
+# 2. 检查间隔适中，避免对生产系统造成压力
+# 3. 配置多个告警渠道确保可靠性
+# 4. 避免在生产数据库上执行不必要的测试查询
+# 5. 设置合理的超时时间，考虑网络延迟
+# 6. 监控外部依赖服务，但频率要低

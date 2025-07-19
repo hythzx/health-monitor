@@ -1,0 +1,217 @@
+# 开发环境配置模板
+# 适合开发和测试环境的配置，注重调试和详细信息
+
+global:
+  check_interval: 15        # 开发环境检查更频繁，便于调试
+  log_level: DEBUG          # 开发环境记录详细日志
+  log_file: logs/dev-health-monitor.log
+  log_max_size: 50          # 较小的日志文件
+  log_backup_count: 3
+
+services:
+  # 本地MySQL开发数据库
+  dev-mysql:
+    type: mysql
+    host: localhost
+    port: 3306
+    username: dev_user
+    password: "dev_password"
+    database: development
+    timeout: 5
+    check_interval: 15
+    test_queries: true        # 开发环境可以执行测试查询
+    collect_status: true
+    test_database_access: true
+
+  # 本地Redis
+  dev-redis:
+    type: redis
+    host: localhost
+    port: 6379
+    # password: ""            # 开发环境通常不设密码
+    database: 0
+    timeout: 3
+    check_interval: 10
+    test_operations: true     # 开发环境可以执行读写测试
+    collect_info: true
+
+  # 本地MongoDB
+  dev-mongodb:
+    type: mongodb
+    host: localhost
+    port: 27017
+    # username: ""            # 开发环境可能不需要认证
+    # password: ""
+    database: dev_db
+    timeout: 5
+    check_interval: 20
+    test_queries: true
+    test_operations: true     # 开发环境可以执行文档操作测试
+    collect_status: true
+    test_database_access: true
+
+  # 本地EMQX
+  dev-emqx:
+    type: emqx
+    host: localhost
+    port: 1883
+    username: dev_user
+    password: "dev_password"
+    client_id: health_monitor_dev
+    timeout: 10
+    check_interval: 30
+    check_method: mqtt        # 开发环境使用MQTT测试完整功能
+    test_pubsub: true         # 测试发布订阅功能
+    also_check_api: true      # 同时测试HTTP API
+    api_port: 18083
+    api_username: admin
+    api_password: public
+    collect_stats: true
+
+  # 本地开发API
+  dev-api:
+    type: restful
+    url: http://localhost:8080/api/health
+    method: GET
+    timeout: 5
+    check_interval: 15
+    headers:
+      Accept: "application/json"
+      X-Environment: "development"
+    expected_status: 200
+    expected_content: "ok"
+    validate_json: true
+    required_json_fields:
+      - status
+    collect_response_stats: true
+
+  # 前端开发服务器
+  frontend-dev:
+    type: restful
+    url: http://localhost:3000
+    method: GET
+    timeout: 3
+    check_interval: 30
+    expected_status: 200
+    collect_response_stats: false
+
+  # 测试API端点
+  test-api:
+    type: restful
+    url: http://localhost:8080/api/test
+    method: POST
+    timeout: 8
+    check_interval: 60
+    headers:
+      Content-Type: "application/json"
+      X-Test-Mode: "true"
+    json:
+      test: true
+      timestamp: "{{timestamp}}"
+    expected_status: [200, 201]
+    validate_json: true
+    collect_response_stats: true
+
+  # 外部测试服务
+  external-test:
+    type: restful
+    url: https://httpbin.org/status/200
+    method: GET
+    timeout: 10
+    check_interval: 120       # 外部测试服务检查频率低一些
+    expected_status: 200
+    collect_response_stats: false
+
+alerts:
+  # 开发环境控制台告警（用于调试）
+  - name: console-alert
+    type: http
+    url: "http://localhost:8080/dev/alerts"  # 本地开发服务器接收告警
+    method: POST
+    timeout: 5
+    max_retries: 1            # 开发环境不需要太多重试
+    retry_delay: 0.5
+    headers:
+      Content-Type: "application/json"
+      X-Environment: "development"
+    template: |
+      {
+        "level": "warning",
+        "service": "{{service_name}}",
+        "type": "{{service_type}}",
+        "status": "{{status}}",
+        "timestamp": "{{timestamp}}",
+        "response_time": {{response_time}},
+        "error": "{{error_message}}",
+        "metadata": {{metadata_json}}
+      }
+
+  # 开发团队Slack频道
+  - name: dev-slack
+    type: http
+    url: "https://hooks.slack.com/services/YOUR/DEV/WEBHOOK"
+    method: POST
+    timeout: 10
+    max_retries: 2
+    retry_delay: 1.0
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "channel": "#dev-alerts",
+        "username": "Health Monitor Dev",
+        "icon_emoji": ":warning:",
+        "text": "🔧 Dev Environment Alert",
+        "attachments": [
+          {
+            "color": "warning",
+            "fields": [
+              {
+                "title": "Service",
+                "value": "{{service_name}} ({{service_type}})",
+                "short": true
+              },
+              {
+                "title": "Status",
+                "value": "{{status}}",
+                "short": true
+              },
+              {
+                "title": "Response Time",
+                "value": "{{response_time}}ms",
+                "short": true
+              },
+              {
+                "title": "Error",
+                "value": "{{error_message}}",
+                "short": false
+              }
+            ]
+          }
+        ]
+      }
+
+  # 开发环境邮件通知（可选）
+  - name: dev-email
+    type: http
+    url: "http://localhost:1080/api/send"  # 本地邮件测试服务
+    method: POST
+    timeout: 5
+    max_retries: 1
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "to": "developer@localhost",
+        "subject": "Dev Health Alert: {{service_name}}",
+        "text": "Service: {{service_name}}\nType: {{service_type}}\nStatus: {{status}}\nTime: {{timestamp}}\nError: {{error_message}}"
+      }
+
+# 开发环境特点：
+# 1. 更频繁的检查间隔，便于快速发现问题
+# 2. 详细的DEBUG级别日志
+# 3. 启用所有测试功能，包括读写操作测试
+# 4. 收集详细的统计信息用于分析
+# 5. 告警通知发送到开发工具和本地服务
+# 6. 较短的超时时间，因为都是本地服务
+# 7. 包含前端开发服务器等开发特有的服务

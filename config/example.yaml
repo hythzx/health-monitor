@@ -1,0 +1,160 @@
+# 服务健康监控系统 - 标准配置示例
+# 包含常用服务类型和配置选项的示例
+
+# ============================================================================
+# 全局配置
+# ============================================================================
+global:
+  check_interval: 30        # 默认检查间隔（秒）
+  log_level: INFO          # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_file: /var/log/health-monitor.log  # 日志文件路径
+  log_max_size: 100        # 日志文件最大大小（MB）
+  log_backup_count: 5      # 保留的日志文件数量
+
+# ============================================================================
+# 服务监控配置
+# ============================================================================
+services:
+  # Redis缓存服务
+  redis-cache:
+    type: redis
+    host: localhost
+    port: 6379
+    password: "your_redis_password"  # Redis密码，如果没有设置密码可以注释掉
+    database: 0                      # Redis数据库编号
+    timeout: 5                       # 连接超时时间（秒）
+    check_interval: 10               # 检查间隔（秒）
+    test_operations: false           # 是否执行SET/GET操作测试
+    collect_info: true               # 是否收集Redis服务器信息
+
+  # MySQL数据库
+  user-database:
+    type: mysql
+    host: localhost
+    port: 3306
+    username: monitor_user           # 数据库监控用户
+    password: "db_password"          # 数据库密码
+    database: users                  # 要连接的数据库名
+    timeout: 10                      # 连接超时时间（秒）
+    check_interval: 30               # 检查间隔（秒）
+    test_queries: false              # 是否执行测试查询
+    collect_status: true             # 是否收集数据库状态信息
+
+  # EMQX消息代理
+  message-broker:
+    type: emqx
+    host: localhost
+    port: 1883                       # MQTT端口
+    username: mqtt_user              # MQTT用户名
+    password: "mqtt_password"        # MQTT密码
+    client_id: health_monitor        # MQTT客户端ID
+    timeout: 15                      # 连接超时时间（秒）
+    check_interval: 20               # 检查间隔（秒）
+    check_method: mqtt               # 检查方法: mqtt 或 http
+    test_pubsub: false               # 是否测试发布/订阅功能
+
+  # RESTful API服务
+  user-api:
+    type: restful
+    url: https://api.example.com/health
+    method: GET                      # HTTP方法
+    headers:
+      Authorization: "Bearer your_api_token"
+      Accept: "application/json"
+    expected_status: 200             # 期望的HTTP状态码
+    expected_content: "healthy"      # 期望响应内容包含的字符串
+    timeout: 10                      # 请求超时时间（秒）
+    check_interval: 20               # 检查间隔（秒）
+    validate_json: true              # 是否验证JSON格式
+
+  # MongoDB文档数据库
+  document-store:
+    type: mongodb
+    host: localhost
+    port: 27017
+    username: mongo_user             # MongoDB用户名
+    password: "mongo_password"       # MongoDB密码
+    database: documents              # 要连接的数据库名
+    timeout: 10                      # 连接超时时间（秒）
+    check_interval: 25               # 检查间隔（秒）
+    test_queries: false              # 是否执行测试查询
+    collect_status: true             # 是否收集服务器状态信息
+
+# ============================================================================
+# 告警配置
+# ============================================================================
+alerts:
+  # 钉钉机器人告警
+  - name: dingtalk-robot
+    type: http
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGTALK_TOKEN"
+    method: POST
+    timeout: 10                      # 告警发送超时时间（秒）
+    max_retries: 3                   # 最大重试次数
+    retry_delay: 1.0                 # 重试延迟（秒）
+    retry_backoff: 2.0               # 指数退避倍数
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 服务健康告警\n\n服务名称: {{service_name}}\n服务类型: {{service_type}}\n当前状态: {{status}}\n发生时间: {{timestamp}}\n响应时间: {{response_time}}ms\n错误信息: {{error_message}}\n\n请及时处理！"
+        }
+      }
+
+  # 自定义Webhook告警
+  - name: webhook-alert
+    type: http
+    url: "https://your-webhook-endpoint.com/alerts"
+    method: POST
+    timeout: 15
+    max_retries: 2
+    retry_delay: 1.0
+    retry_backoff: 1.5
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "your-webhook-api-key"
+      X-Source: "health-monitor"
+    template: |
+      {
+        "alert_type": "service_health",
+        "service": {
+          "name": "{{service_name}}",
+          "type": "{{service_type}}",
+          "status": "{{status}}"
+        },
+        "timestamp": "{{timestamp}}",
+        "response_time_ms": {{response_time}},
+        "error_message": "{{error_message}}"
+      }
+
+# ============================================================================
+# 配置说明
+# ============================================================================
+# 
+# 1. 服务类型说明：
+#    - redis: Redis缓存服务
+#    - mysql: MySQL数据库
+#    - mongodb: MongoDB文档数据库
+#    - emqx: EMQX MQTT消息代理
+#    - restful: RESTful HTTP API服务
+#
+# 2. 全局配置说明：
+#    - check_interval: 默认检查间隔，如果服务没有单独配置则使用此值
+#    - log_level: 日志级别，建议生产环境使用INFO或WARNING
+#    - log_file: 日志文件路径，如果不指定则只输出到控制台
+#
+# 3. 告警模板变量：
+#    - {{service_name}}: 服务名称
+#    - {{service_type}}: 服务类型
+#    - {{status}}: 服务状态 (UP/DOWN)
+#    - {{timestamp}}: 时间戳
+#    - {{response_time}}: 响应时间（毫秒）
+#    - {{error_message}}: 错误信息
+#    - {{metadata_json}}: 元数据JSON字符串
+#
+# 4. 安全建议：
+#    - 将敏感信息（密码、API密钥）存储在环境变量中
+#    - 为监控创建专门的数据库用户，只授予必要权限
+#    - 定期轮换密码和API密钥

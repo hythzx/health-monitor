@@ -1,0 +1,53 @@
+# 服务健康监控系统 - 基础配置示例
+# 适合快速开始使用的简化配置
+
+# 全局配置
+global:
+  check_interval: 30 # 默认检查间隔30秒
+  log_level: DEBUG # 日志级别
+  log_file: health-monitor.log # 日志文件
+
+# 服务监控配置
+services:
+  # Redis缓存
+  redis-cache:
+    type: redis
+    host: localhost
+    port: 6379
+    # password: "your_password"  # 如果Redis有密码，取消注释并设置
+    timeout: 5
+    check_interval: 10
+
+  database:
+    type: mysql
+    host: localhost
+    port: 3306
+    username: root
+    password: aiyun123!
+    # database: users               # 注释掉特定数据库，只测试MySQL服务器连接
+    timeout: 10                      # 连接超时时间（秒）
+    check_interval: 5                # 检查间隔（秒）
+    # 高级选项
+    test_queries: true               # 是否执行版本查询等测试
+    collect_status: true             # 是否收集数据库状态信息
+    test_database_access: false      # 禁用数据库访问测试，因为没有指定数据库
+
+# 告警配置
+alerts:
+  # 钉钉机器人告警
+  - name: dingtalk
+    type: http
+    url: "https://oapi.dingtalk.com/robot/send?access_token=3a66c5e46570506ce0f8749c3d2da66afde17ec4376a6097d59a61613be72bad"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    ssl_verify: false # 临时禁用SSL验证以解决证书问题
+    max_retries: 3
+    retry_delay: 2
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 服务告警\n\n服务: {{service_name}}\n状态: {{status}}\n时间: {{timestamp}}\n错误: {{error_message}}"
+        }
+      }

@@ -1,0 +1,153 @@
+version: '3.8'
+
+services:
+  # 健康监控主服务
+  health-monitor:
+    image: hythzx/health-monitor:latest
+    container_name: health-monitor
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Shanghai
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis-demo
+      - mysql-demo
+    restart: unless-stopped
+    command: ["python", "main.py", "config/config.yaml"]
+    networks:
+      - health-monitor-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 示例服务 - Redis
+  redis-demo:
+    image: redis:7-alpine
+    container_name: redis-demo
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - health-monitor-net
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 示例服务 - MySQL
+  mysql-demo:
+    image: mysql:8.0
+    container_name: mysql-demo
+    environment:
+      MYSQL_ROOT_PASSWORD: password123
+      MYSQL_DATABASE: healthdb
+      MYSQL_USER: monitor
+      MYSQL_PASSWORD: monitor123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    networks:
+      - health-monitor-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword123"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 示例服务 - MongoDB
+  mongodb-demo:
+    image: mongo:6
+    container_name: mongodb-demo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: healthdb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - health-monitor-net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 示例服务 - EMQX (MQTT)
+  emqx-demo:
+    image: emqx/emqx:5
+    container_name: emqx-demo
+    environment:
+      - EMQX_NODE_NAME=emqx@node1.emqx.io
+      - EMQX_CLUSTER__DISCOVERY_STRATEGY=static
+      - EMQX_CLUSTER__STATIC__SEEDS=emqx@node1.emqx.io
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+      - "8084:8084"
+      - "8883:8883"
+      - "18083:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    restart: unless-stopped
+    networks:
+      - health-monitor-net
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 示例Web API服务
+  api-demo:
+    image: nginx:alpine
+    container_name: api-demo
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/usr/share/nginx/html:ro
+    ports:
+      - "8090:80"
+    restart: unless-stopped
+    networks:
+      - health-monitor-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  health-monitor-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis_data:
+    driver: local
+  mysql_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  emqx_data:
+    driver: local
+  emqx_log:
+    driver: local 

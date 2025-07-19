@@ -1,0 +1,129 @@
+# 健康监控系统配置文件 - Docker Compose版本
+# 此配置文件用于Docker Compose环境下的演示
+
+# 全局配置
+global:
+  check_interval: 30                 # 默认检查间隔（秒）
+  max_concurrent_checks: 10          # 最大并发检查数
+  log_level: INFO                    # 日志级别
+  log_file: logs/health-monitor.log  # 日志文件路径
+  log_max_size: 100                  # 日志文件最大大小（MB）
+  log_backup_count: 5                # 保留的日志文件数量
+  state_file: logs/state.json        # 状态持久化文件
+
+# 服务监控配置
+services:
+  # Redis监控
+  redis-demo:
+    type: redis
+    host: redis-demo                 # Docker Compose服务名
+    port: 6379
+    timeout: 5
+    check_interval: 10
+    test_operations: true            # 执行SET/GET测试
+    collect_info: true               # 收集服务器信息
+
+  # MySQL监控
+  mysql-demo:
+    type: mysql
+    host: mysql-demo                 # Docker Compose服务名
+    port: 3306
+    username: monitor
+    password: "monitor123"
+    database: healthdb
+    timeout: 10
+    check_interval: 20
+    test_queries: true               # 执行测试查询
+    collect_status: true             # 收集数据库状态
+
+  # MongoDB监控
+  mongodb-demo:
+    type: mongodb
+    host: mongodb-demo               # Docker Compose服务名
+    port: 27017
+    username: admin
+    password: "admin123"
+    database: healthdb
+    timeout: 10
+    check_interval: 25
+    test_queries: false              # 不执行测试查询（可能需要权限）
+    collect_status: true             # 收集服务器状态
+
+  # EMQX MQTT监控
+  emqx-demo:
+    type: emqx
+    host: emqx-demo                  # Docker Compose服务名
+    port: 1883
+    timeout: 15
+    check_interval: 30
+    check_method: mqtt               # 使用MQTT方式检查
+    client_id: health_monitor_client
+    test_pubsub: false               # 不执行发布/订阅测试
+
+  # Web API监控
+  api-demo:
+    type: restful
+    url: http://api-demo/health      # 内部容器地址
+    method: GET
+    timeout: 10
+    check_interval: 15
+    expected_status: 200
+    headers:
+      User-Agent: "HealthMonitor/1.0"
+    validate_json: false             # 不验证JSON格式
+    collect_response_stats: true     # 收集响应统计
+
+# 告警配置
+alerts:
+  # 钉钉机器人告警（需要配置真实Token）
+  - name: dingtalk-demo
+    type: http
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGTALK_TOKEN"
+    method: POST
+    timeout: 10
+    max_retries: 3
+    retry_delay: 1.0
+    retry_backoff: 2.0
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 健康监控告警\n📊 服务: {{service_name}}\n📈 状态: {{status}}\n⏰ 时间: {{timestamp}}\n❗ 错误: {{error_message}}\n⚡ 响应时间: {{response_time}}ms"
+        }
+      }
+
+  # 企业微信机器人告警（需要配置真实Key）
+  - name: wechat-demo
+    type: http
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WECHAT_KEY"
+    method: POST
+    timeout: 10
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "markdown",
+        "markdown": {
+          "content": "## 🚨 服务健康监控告警\n\n**服务名称**: {{service_name}}\n**服务类型**: {{service_type}}\n**当前状态**: <font color=\"warning\">{{status}}</font>\n**检查时间**: {{timestamp}}\n**响应时间**: {{response_time}}ms\n**错误信息**: {{error_message}}\n\n> 请及时检查服务状态并处理相关问题"
+        }
+      }
+
+  # 控制台输出告警（用于测试）
+  - name: console-output
+    type: http
+    url: "http://localhost:8080/webhook/test"  # 测试地址
+    method: POST
+    timeout: 5
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "alert_type": "health_monitor",
+        "service": "{{service_name}}",
+        "status": "{{status}}",
+        "timestamp": "{{timestamp}}",
+        "response_time": "{{response_time}}",
+        "error": "{{error_message}}"
+      } 

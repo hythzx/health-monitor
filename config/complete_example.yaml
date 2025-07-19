@@ -1,0 +1,440 @@
+# 服务健康监控系统 - 完整配置示例
+# 本文件展示了所有支持的配置选项和最佳实践
+
+# ============================================================================
+# 全局配置
+# ============================================================================
+global:
+  # 默认检查间隔（秒）- 如果服务没有单独配置check_interval，将使用此值
+  check_interval: 30
+  
+  # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_level: INFO
+  
+  # 日志文件路径 - 如果不指定，将只输出到控制台
+  log_file: /var/log/health-monitor.log
+  
+  # 日志文件最大大小（MB）- 超过此大小将进行轮转
+  log_max_size: 100
+  
+  # 保留的日志文件数量
+  log_backup_count: 5
+
+# ============================================================================
+# 服务监控配置
+# ============================================================================
+services:
+  # Redis 缓存服务监控
+  redis-cache:
+    type: redis
+    host: localhost
+    port: 6379
+    password: "your_redis_password"  # 可选，如果Redis设置了密码
+    database: 0                      # Redis数据库编号，默认为0
+    timeout: 5                       # 连接超时时间（秒）
+    check_interval: 10               # 检查间隔（秒）
+    
+    # 高级选项
+    test_operations: true            # 是否执行SET/GET操作测试
+    collect_info: true               # 是否收集Redis服务器信息
+    
+  # Redis 会话存储（另一个Redis实例）
+  redis-session:
+    type: redis
+    host: redis-session.example.com
+    port: 6379
+    password: "session_redis_password"
+    database: 1
+    timeout: 3
+    check_interval: 15
+    test_operations: false           # 会话存储不需要操作测试
+    collect_info: false
+
+  # MySQL 主数据库
+  user-database:
+    type: mysql
+    host: localhost
+    port: 3306
+    username: monitor_user
+    password: "db_password"
+    database: users                  # 要连接的数据库名
+    timeout: 10                      # 连接超时时间（秒）
+    check_interval: 30               # 检查间隔（秒）
+    
+    # 高级选项
+    test_queries: true               # 是否执行版本查询等测试
+    collect_status: true             # 是否收集数据库状态信息
+    test_database_access: true       # 是否测试指定数据库的访问权限
+
+  # MySQL 只读副本
+  user-database-readonly:
+    type: mysql
+    host: mysql-readonly.example.com
+    port: 3306
+    username: readonly_user
+    password: "readonly_password"
+    database: users
+    timeout: 8
+    check_interval: 60               # 只读副本检查频率可以低一些
+    test_queries: false              # 只读副本不需要复杂测试
+    collect_status: false
+    test_database_access: true
+
+  # MongoDB 文档数据库
+  document-store:
+    type: mongodb
+    host: localhost
+    port: 27017
+    username: mongo_user
+    password: "mongo_password"
+    database: documents              # 要连接的数据库名
+    timeout: 10                      # 连接超时时间（秒）
+    check_interval: 20               # 检查间隔（秒）
+    
+    # 高级选项
+    test_queries: true               # 是否执行集合列表查询等测试
+    test_operations: false           # 是否执行文档插入/查询/删除测试
+    collect_status: true             # 是否收集服务器状态信息
+    test_database_access: true       # 是否测试指定数据库的访问权限
+
+  # MongoDB 集群
+  mongodb-cluster:
+    type: mongodb
+    host: mongodb-cluster.example.com
+    port: 27017
+    username: cluster_user
+    password: "cluster_password"
+    database: production
+    timeout: 15
+    check_interval: 30
+    test_queries: true
+    test_operations: false           # 生产环境不建议执行写操作测试
+    collect_status: true
+    test_database_access: true
+
+  # EMQX MQTT消息代理
+  message-broker:
+    type: emqx
+    host: localhost
+    port: 1883                       # MQTT端口
+    username: mqtt_user
+    password: "mqtt_password"
+    client_id: health_monitor        # MQTT客户端ID
+    timeout: 15                      # 连接超时时间（秒）
+    check_interval: 20               # 检查间隔（秒）
+    
+    # 检查方法: mqtt 或 http
+    check_method: mqtt               # 使用MQTT协议检查
+    
+    # 高级选项
+    test_pubsub: true                # 是否测试发布/订阅功能
+    also_check_api: false            # 是否同时检查HTTP API
+    
+    # HTTP API配置（当check_method为http或also_check_api为true时使用）
+    api_port: 18083                  # EMQX管理API端口
+    api_username: admin              # API用户名
+    api_password: public             # API密码
+    collect_stats: false             # 是否收集统计信息
+
+  # EMQX 集群（通过HTTP API检查）
+  emqx-cluster:
+    type: emqx
+    host: emqx-cluster.example.com
+    port: 1883
+    username: cluster_mqtt_user
+    password: "cluster_mqtt_password"
+    client_id: health_monitor_cluster
+    timeout: 20
+    check_interval: 30
+    
+    check_method: http               # 使用HTTP API检查
+    api_port: 18083
+    api_username: admin
+    api_password: cluster_admin_password
+    collect_stats: true              # 收集集群统计信息
+
+  # RESTful API 服务
+  user-api:
+    type: restful
+    url: https://api.example.com/health
+    method: GET                      # HTTP方法: GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH
+    timeout: 10                      # 请求超时时间（秒）
+    check_interval: 20               # 检查间隔（秒）
+    
+    # HTTP配置
+    headers:
+      Authorization: "Bearer your_api_token"
+      User-Agent: "HealthMonitor/1.0"
+      Accept: "application/json"
+    
+    # 响应验证
+    expected_status: 200             # 期望的HTTP状态码，也可以是列表 [200, 201, 202]
+    expected_content: "healthy"      # 期望响应内容包含的字符串
+    validate_json: true              # 是否验证JSON格式
+    required_json_fields:            # 必需的JSON字段
+      - status
+      - timestamp
+    
+    # 高级选项
+    collect_response_stats: true     # 是否收集响应统计信息
+
+  # RESTful API - POST请求示例
+  notification-api:
+    type: restful
+    url: https://notification.example.com/api/health
+    method: POST
+    timeout: 8
+    check_interval: 30
+    
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "your_notification_api_key"
+    
+    # POST请求数据
+    json:
+      action: "health_check"
+      source: "health_monitor"
+    
+    expected_status: [200, 201]      # 接受多个状态码
+    validate_json: true
+    collect_response_stats: false
+
+  # RESTful API - 带认证的服务
+  admin-api:
+    type: restful
+    url: https://admin.example.com/api/status
+    method: GET
+    timeout: 12
+    check_interval: 60               # 管理API检查频率可以低一些
+    
+    # HTTP基本认证
+    auth_username: admin_user
+    auth_password: admin_password
+    
+    headers:
+      Accept: "application/json"
+    
+    expected_status: 200
+    expected_content: ["status", "ok"]  # 响应必须包含这些字符串
+    validate_json: true
+    required_json_fields:
+      - status
+      - version
+      - uptime
+
+  # 外部服务健康检查
+  external-service:
+    type: restful
+    url: https://external-service.com/ping
+    method: HEAD                     # HEAD请求只检查连通性，不获取响应体
+    timeout: 5
+    check_interval: 120              # 外部服务检查频率更低
+    
+    expected_status: [200, 204]
+    collect_response_stats: false
+
+# ============================================================================
+# 告警配置
+# ============================================================================
+alerts:
+  # 钉钉机器人告警
+  - name: dingtalk-robot
+    type: http
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGTALK_TOKEN"
+    method: POST
+    timeout: 10                      # 告警发送超时时间（秒）
+    
+    # 重试配置
+    max_retries: 3                   # 最大重试次数
+    retry_delay: 1.0                 # 重试延迟（秒）
+    retry_backoff: 2.0               # 指数退避倍数
+    
+    headers:
+      Content-Type: "application/json"
+    
+    # 消息模板（支持变量替换）
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 服务健康告警\n\n服务名称: {{service_name}}\n服务类型: {{service_type}}\n当前状态: {{status}}\n发生时间: {{timestamp}}\n响应时间: {{response_time}}ms\n错误信息: {{error_message}}\n\n请及时处理！"
+        }
+      }
+
+  # 企业微信机器人告警
+  - name: wechat-robot
+    type: http
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WECHAT_KEY"
+    method: POST
+    timeout: 8
+    max_retries: 2
+    retry_delay: 0.5
+    retry_backoff: 1.5
+    
+    headers:
+      Content-Type: "application/json"
+    
+    template: |
+      {
+        "msgtype": "markdown",
+        "markdown": {
+          "content": "## 🚨 服务健康告警\n\n**服务名称**: {{service_name}}\n**服务类型**: {{service_type}}\n**当前状态**: <font color=\"warning\">{{status}}</font>\n**发生时间**: {{timestamp}}\n**响应时间**: {{response_time}}ms\n**错误信息**: {{error_message}}"
+        }
+      }
+
+  # Slack告警
+  - name: slack-webhook
+    type: http
+    url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    method: POST
+    timeout: 10
+    max_retries: 3
+    retry_delay: 1.0
+    retry_backoff: 2.0
+    
+    headers:
+      Content-Type: "application/json"
+    
+    template: |
+      {
+        "text": "🚨 Service Health Alert",
+        "attachments": [
+          {
+            "color": "danger",
+            "fields": [
+              {
+                "title": "Service",
+                "value": "{{service_name}} ({{service_type}})",
+                "short": true
+              },
+              {
+                "title": "Status",
+                "value": "{{status}}",
+                "short": true
+              },
+              {
+                "title": "Time",
+                "value": "{{timestamp}}",
+                "short": true
+              },
+              {
+                "title": "Response Time",
+                "value": "{{response_time}}ms",
+                "short": true
+              },
+              {
+                "title": "Error",
+                "value": "{{error_message}}",
+                "short": false
+              }
+            ]
+          }
+        ]
+      }
+
+  # 自定义Webhook告警
+  - name: custom-webhook
+    type: http
+    url: "https://your-webhook-endpoint.com/alerts"
+    method: POST
+    timeout: 15
+    max_retries: 5
+    retry_delay: 2.0
+    retry_backoff: 1.5
+    
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "your-webhook-api-key"
+      X-Source: "health-monitor"
+    
+    # 自定义JSON格式
+    template: |
+      {
+        "alert_type": "service_health",
+        "severity": "critical",
+        "service": {
+          "name": "{{service_name}}",
+          "type": "{{service_type}}",
+          "status": "{{status}}"
+        },
+        "metrics": {
+          "response_time_ms": {{response_time}},
+          "timestamp": "{{timestamp}}"
+        },
+        "details": {
+          "error_message": "{{error_message}}",
+          "metadata": {{metadata_json}}
+        }
+      }
+
+  # 邮件告警（通过HTTP API）
+  - name: email-alert
+    type: http
+    url: "https://api.sendgrid.com/v3/mail/send"
+    method: POST
+    timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+    retry_backoff: 2.0
+    
+    headers:
+      Authorization: "Bearer YOUR_SENDGRID_API_KEY"
+      Content-Type: "application/json"
+    
+    template: |
+      {
+        "personalizations": [
+          {
+            "to": [
+              {
+                "email": "admin@example.com",
+                "name": "System Administrator"
+              }
+            ],
+            "subject": "🚨 Service Health Alert: {{service_name}}"
+          }
+        ],
+        "from": {
+          "email": "noreply@example.com",
+          "name": "Health Monitor"
+        },
+        "content": [
+          {
+            "type": "text/html",
+            "value": "<h2>Service Health Alert</h2><p><strong>Service:</strong> {{service_name}} ({{service_type}})</p><p><strong>Status:</strong> {{status}}</p><p><strong>Time:</strong> {{timestamp}}</p><p><strong>Response Time:</strong> {{response_time}}ms</p><p><strong>Error:</strong> {{error_message}}</p>"
+          }
+        ]
+      }
+
+# ============================================================================
+# 配置说明和最佳实践
+# ============================================================================
+
+# 1. 检查间隔建议：
+#    - 关键服务（数据库、缓存）: 10-30秒
+#    - 一般服务（API、消息队列）: 30-60秒
+#    - 外部服务: 60-300秒
+#    - 管理接口: 60-600秒
+
+# 2. 超时时间建议：
+#    - 本地服务: 3-10秒
+#    - 内网服务: 5-15秒
+#    - 外网服务: 10-30秒
+
+# 3. 告警配置建议：
+#    - 配置多个告警渠道以确保可靠性
+#    - 设置适当的重试次数和延迟
+#    - 使用模板自定义告警消息格式
+#    - 考虑告警频率限制，避免告警风暴
+
+# 4. 安全建议：
+#    - 使用环境变量存储敏感信息（密码、API密钥）
+#    - 为监控用户创建专门的数据库账户，只授予必要权限
+#    - 定期轮换密码和API密钥
+#    - 使用HTTPS进行所有外部通信
+
+# 5. 性能建议：
+#    - 根据服务重要性调整检查频率
+#    - 避免在高峰期进行频繁检查
+#    - 监控系统本身的资源使用情况
+#    - 考虑使用连接池减少连接开销
