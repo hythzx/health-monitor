@@ -9,10 +9,9 @@ import logging
 import logging.handlers
 import os
 import sys
-from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict, Any
-from enum import Enum
 
 
 class LogLevel(Enum):
@@ -34,21 +33,21 @@ class LogManager:
     - 自定义格式化
     - 日志轮转和文件大小管理
     """
-    
+
     _instance: Optional['LogManager'] = None
     _initialized: bool = False
-    
+
     def __new__(cls) -> 'LogManager':
         """单例模式实现"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         """初始化日志管理器"""
         if self._initialized:
             return
-            
+
         self._loggers: Dict[str, logging.Logger] = {}
         self._default_format = (
             '%(asctime)s - %(name)s - %(levelname)s - '
@@ -58,7 +57,7 @@ class LogManager:
             '%(asctime)s - %(levelname)s - %(message)s'
         )
         self._date_format = '%Y-%m-%d %H:%M:%S'
-        
+
         # 默认配置
         self._log_level = LogLevel.INFO
         self._log_file: Optional[str] = None
@@ -66,9 +65,9 @@ class LogManager:
         self._backup_count = 5
         self._enable_console = True
         self._enable_file = False
-        
+
         self._initialized = True
-    
+
     def configure(self, config: Dict[str, Any]) -> None:
         """
         配置日志管理器
@@ -92,36 +91,36 @@ class LogManager:
                 self._log_level = LogLevel[level_str]
             else:
                 raise ValueError(f"无效的日志级别: {level_str}")
-        
+
         # 设置日志文件
         if 'log_file' in config:
             self._log_file = config['log_file']
             self._enable_file = True
-        
+
         # 设置文件大小和备份数量
         if 'max_file_size' in config:
             self._max_file_size = config['max_file_size']
-        
+
         if 'backup_count' in config:
             self._backup_count = config['backup_count']
-        
+
         # 设置输出选项
         if 'enable_console' in config:
             self._enable_console = config['enable_console']
-        
+
         if 'enable_file' in config:
             self._enable_file = config['enable_file']
-        
+
         # 设置格式
         if 'format' in config:
             self._default_format = config['format']
-        
+
         if 'console_format' in config:
             self._console_format = config['console_format']
-        
+
         if 'date_format' in config:
             self._date_format = config['date_format']
-    
+
     def get_logger(self, name: str) -> logging.Logger:
         """
         获取指定名称的日志记录器
@@ -134,13 +133,13 @@ class LogManager:
         """
         if name in self._loggers:
             return self._loggers[name]
-        
+
         logger = logging.getLogger(name)
         logger.setLevel(self._log_level.value)
-        
+
         # 清除现有的处理器
         logger.handlers.clear()
-        
+
         # 添加控制台处理器
         if self._enable_console:
             console_handler = logging.StreamHandler(sys.stdout)
@@ -151,11 +150,11 @@ class LogManager:
             )
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
-        
+
         # 添加文件处理器
         if self._enable_file and self._log_file:
             self._ensure_log_directory()
-            
+
             # 使用RotatingFileHandler实现日志轮转
             file_handler = logging.handlers.RotatingFileHandler(
                 self._log_file,
@@ -170,19 +169,19 @@ class LogManager:
             )
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
-        
+
         # 防止日志向上传播
         logger.propagate = False
-        
+
         self._loggers[name] = logger
         return logger
-    
+
     def _ensure_log_directory(self) -> None:
         """确保日志目录存在"""
         if self._log_file:
             log_dir = Path(self._log_file).parent
             log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def set_level(self, level: LogLevel) -> None:
         """
         设置全局日志级别
@@ -191,16 +190,16 @@ class LogManager:
             level: 新的日志级别
         """
         self._log_level = level
-        
+
         # 更新所有现有日志记录器的级别
         for logger in self._loggers.values():
             logger.setLevel(level.value)
             for handler in logger.handlers:
                 handler.setLevel(level.value)
-    
-    def add_file_handler(self, log_file: str, 
-                        max_size: int = None, 
-                        backup_count: int = None) -> None:
+
+    def add_file_handler(self, log_file: str,
+                         max_size: int = None,
+                         backup_count: int = None) -> None:
         """
         为所有日志记录器添加文件处理器
         
@@ -214,10 +213,10 @@ class LogManager:
             self._max_file_size = max_size
         if backup_count is not None:
             self._backup_count = backup_count
-        
+
         self._enable_file = True
         self._ensure_log_directory()
-        
+
         # 为所有现有日志记录器添加文件处理器
         for logger in self._loggers.values():
             # 检查是否已有文件处理器
@@ -225,7 +224,7 @@ class LogManager:
                 isinstance(handler, logging.handlers.RotatingFileHandler)
                 for handler in logger.handlers
             )
-            
+
             if not has_file_handler:
                 file_handler = logging.handlers.RotatingFileHandler(
                     self._log_file,
@@ -240,21 +239,21 @@ class LogManager:
                 )
                 file_handler.setFormatter(file_formatter)
                 logger.addHandler(file_handler)
-    
+
     def remove_file_handler(self) -> None:
         """移除所有日志记录器的文件处理器"""
         self._enable_file = False
-        
+
         for logger in self._loggers.values():
             handlers_to_remove = [
                 handler for handler in logger.handlers
                 if isinstance(handler, logging.handlers.RotatingFileHandler)
             ]
-            
+
             for handler in handlers_to_remove:
                 logger.removeHandler(handler)
                 handler.close()
-    
+
     def get_log_stats(self) -> Dict[str, Any]:
         """
         获取日志统计信息
@@ -271,18 +270,18 @@ class LogManager:
             'max_file_size': self._max_file_size,
             'backup_count': self._backup_count
         }
-        
+
         if self._log_file and os.path.exists(self._log_file):
             stats['current_log_size'] = os.path.getsize(self._log_file)
-        
+
         return stats
-    
+
     def cleanup(self) -> None:
         """清理资源"""
         for logger in self._loggers.values():
             for handler in logger.handlers:
                 handler.close()
-        
+
         self._loggers.clear()
 
 

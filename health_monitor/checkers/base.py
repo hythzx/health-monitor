@@ -2,13 +2,14 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
+
 from ..models.health_check import HealthCheckResult
 from ..utils.log_manager import get_logger
 
 
 class BaseHealthChecker(ABC):
     """健康检查器抽象基类"""
-    
+
     def __init__(self, name: str, config: Dict[str, Any]):
         """
         初始化健康检查器
@@ -21,7 +22,7 @@ class BaseHealthChecker(ABC):
         self.config = config
         self.service_type = self.__class__.__name__.replace('HealthChecker', '').lower()
         self.logger = get_logger(f'checker.{self.service_type}.{self.name}')
-    
+
     @abstractmethod
     async def check_health(self) -> HealthCheckResult:
         """
@@ -31,7 +32,7 @@ class BaseHealthChecker(ABC):
             HealthCheckResult: 健康检查结果
         """
         pass
-    
+
     @abstractmethod
     def validate_config(self) -> bool:
         """
@@ -41,7 +42,7 @@ class BaseHealthChecker(ABC):
             bool: 配置是否有效
         """
         pass
-    
+
     def get_timeout(self) -> int:
         """
         获取超时时间配置

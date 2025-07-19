@@ -1,8 +1,8 @@
 """健康检查相关的数据模型"""
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Dict, Any, Optional
 
 
 @dataclass
