@@ -305,6 +305,14 @@ class MonitorScheduler:
             
         except Exception as e:
             self.logger.error(f"立即检查服务 {service_name} 失败: {e}")
+            
+            # 调用错误回调
+            if self.on_check_error:
+                try:
+                    await self.on_check_error(service_name, e)
+                except Exception as callback_error:
+                    self.logger.error(f"错误回调执行失败: {callback_error}")
+            
             return None
     
     async def check_all_services_now(self) -> Dict[str, Optional[HealthCheckResult]]:

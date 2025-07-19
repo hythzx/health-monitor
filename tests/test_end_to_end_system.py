@@ -303,6 +303,30 @@ class TestEndToEndSystem:
         for alerter in alert_integrator.alert_manager.alerters:
             alerter.send_alert = mock_send_alert
         
+        # 首先设置初始健康状态
+        initial_states = [
+            HealthCheckResult(
+                service_name='redis-cache',
+                service_type='redis',
+                is_healthy=True,
+                response_time=0.05
+            ),
+            HealthCheckResult(
+                service_name='user-api',
+                service_type='restful',
+                is_healthy=True,
+                response_time=0.1
+            )
+        ]
+        
+        # 设置初始状态（不会触发告警）
+        for result in initial_states:
+            await alert_integrator.process_health_check_result(result)
+            await asyncio.sleep(0.05)
+        
+        # 清空已发送的告警（如果有的话）
+        sent_alerts.clear()
+        
         # 模拟服务状态变化场景
         test_scenarios = [
             # 场景1: 服务从健康变为不健康
