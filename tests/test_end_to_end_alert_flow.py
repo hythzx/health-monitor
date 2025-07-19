@@ -26,11 +26,12 @@ class TestEndToEndAlertFlow:
                 'headers': {
                     'Content-Type': 'application/json'
                 },
+                'max_retries': 0,  # 禁用重试，简化测试
                 'template': '''
                 {
                     "msgtype": "text",
                     "text": {
-                        "content": "🚨 服务告警\\n服务名称: $service_name\\n服务类型: $service_type\\n状态: $status\\n时间: $timestamp\\n错误信息: $error_message"
+                        "content": "🚨 服务告警\\n服务名称: {{service_name}}\\n服务类型: {{service_type}}\\n状态: {{status}}\\n时间: {{timestamp}}\\n错误信息: {{error_message}}"
                     }
                 }
                 '''.strip()
@@ -43,6 +44,7 @@ class TestEndToEndAlertFlow:
                 'headers': {
                     'Content-Type': 'application/json'
                 },
+                'max_retries': 0,  # 禁用重试，简化测试
                 'template': '''
                 {
                     "text": "Service Alert: $service_name is $status",
@@ -83,17 +85,24 @@ class TestEndToEndAlertFlow:
             # 设置mock响应
             mock_response = Mock()
             mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"ok": True})
             mock_response.text = AsyncMock(return_value='{"ok": true}')
             
+            # 创建异步上下文管理器Mock
             mock_request_context = AsyncMock()
             mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_request_context.__aexit__ = AsyncMock(return_value=None)
             
+            # 创建session mock
             mock_session = Mock()
             mock_session.request = Mock(return_value=mock_request_context)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            # 创建session类的异步上下文管理器
+            mock_session_context = AsyncMock()
+            mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_context.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session_class.return_value = mock_session_context
             
             # 第一次健康检查 - 服务正常
             healthy_result = HealthCheckResult(
@@ -144,17 +153,24 @@ class TestEndToEndAlertFlow:
             # 设置mock
             mock_response = Mock()
             mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"ok": True})
             mock_response.text = AsyncMock(return_value='{"ok": true}')
             
+            # 创建异步上下文管理器Mock
             mock_request_context = AsyncMock()
             mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_request_context.__aexit__ = AsyncMock(return_value=None)
             
+            # 创建session mock
             mock_session = Mock()
             mock_session.request = Mock(return_value=mock_request_context)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            # 创建session类的异步上下文管理器
+            mock_session_context = AsyncMock()
+            mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_context.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session_class.return_value = mock_session_context
             
             # 建立初始状态：服务正常 -> 异常 -> 恢复
             results = [
@@ -176,16 +192,24 @@ class TestEndToEndAlertFlow:
             # 设置mock
             mock_response = Mock()
             mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"ok": True})
+            mock_response.text = AsyncMock(return_value='{"ok": true}')
             
+            # 创建异步上下文管理器Mock
             mock_request_context = AsyncMock()
             mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_request_context.__aexit__ = AsyncMock(return_value=None)
             
+            # 创建session mock
             mock_session = Mock()
             mock_session.request = Mock(return_value=mock_request_context)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            # 创建session类的异步上下文管理器
+            mock_session_context = AsyncMock()
+            mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_context.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session_class.return_value = mock_session_context
             
             # 建立初始状态
             initial_result = HealthCheckResult('api-service', 'restful', True, 200.0)
@@ -213,16 +237,24 @@ class TestEndToEndAlertFlow:
             # 设置mock
             mock_response = Mock()
             mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"ok": True})
+            mock_response.text = AsyncMock(return_value='{"ok": true}')
             
+            # 创建异步上下文管理器Mock
             mock_request_context = AsyncMock()
             mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_request_context.__aexit__ = AsyncMock(return_value=None)
             
+            # 创建session mock
             mock_session = Mock()
             mock_session.request = Mock(return_value=mock_request_context)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            # 创建session类的异步上下文管理器
+            mock_session_context = AsyncMock()
+            mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_context.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session_class.return_value = mock_session_context
             
             # 添加服务过滤器，只允许critical服务告警
             critical_services = ['critical-db', 'critical-api']
@@ -261,24 +293,30 @@ class TestEndToEndAlertFlow:
             def create_mock_session(success):
                 mock_response = Mock()
                 mock_response.status = 200 if success else 500
+                mock_response.json = AsyncMock(return_value={"ok": True} if success else {"error": "failed"})
                 mock_response.text = AsyncMock(return_value='OK' if success else 'Error')
                 
+                # 创建异步上下文管理器Mock
                 mock_request_context = AsyncMock()
                 mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
                 mock_request_context.__aexit__ = AsyncMock(return_value=None)
                 
+                # 创建session mock
                 mock_session = Mock()
                 mock_session.request = Mock(return_value=mock_request_context)
-                return mock_session
+                
+                # 创建session类的异步上下文管理器
+                mock_session_context = AsyncMock()
+                mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+                mock_session_context.__aexit__ = AsyncMock(return_value=None)
+                
+                return mock_session_context, mock_session
             
             # 模拟两次调用，第一次成功，第二次失败
-            success_session = create_mock_session(True)
-            failure_session = create_mock_session(False)
+            success_context, success_session = create_mock_session(True)
+            failure_context, failure_session = create_mock_session(False)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(
-                side_effect=[success_session, failure_session]
-            )
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_session_class.side_effect = [success_context, failure_context]
             
             # 触发告警
             results = [
@@ -312,16 +350,24 @@ class TestEndToEndAlertFlow:
             # 设置mock
             mock_response = Mock()
             mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"ok": True})
+            mock_response.text = AsyncMock(return_value='{"ok": true}')
             
+            # 创建异步上下文管理器Mock
             mock_request_context = AsyncMock()
             mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_request_context.__aexit__ = AsyncMock(return_value=None)
             
+            # 创建session mock
             mock_session = Mock()
             mock_session.request = Mock(return_value=mock_request_context)
             
-            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            # 创建session类的异步上下文管理器
+            mock_session_context = AsyncMock()
+            mock_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_context.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_session_class.return_value = mock_session_context
             
             # 触发告警
             results = [
