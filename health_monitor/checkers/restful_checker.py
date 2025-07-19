@@ -2,6 +2,7 @@
 
 import time
 import json
+import asyncio
 from typing import Dict, Any, Optional, List
 import aiohttp
 from .base import BaseHealthChecker
