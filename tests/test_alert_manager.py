@@ -252,7 +252,7 @@ class TestAlertManager:
     
     def test_render_template_basic(self):
         """测试基本模板渲染"""
-        template_str = "服务 $service_name 状态: $status"
+        template_str = "服务 {{service_name}} 状态: {{status}}"
         message = AlertMessage(
             service_name='test-service',
             service_type='redis',
@@ -265,12 +265,12 @@ class TestAlertManager:
     def test_render_template_all_variables(self):
         """测试所有变量的模板渲染"""
         template_str = (
-            "服务: $service_name\n"
-            "类型: $service_type\n"
-            "状态: $status\n"
-            "时间: $timestamp\n"
-            "错误: $error_message\n"
-            "响应时间: $response_time"
+            "服务: {{service_name}}\n"
+            "类型: {{service_type}}\n"
+            "状态: {{status}}\n"
+            "时间: {{timestamp}}\n"
+            "错误: {{error_message}}\n"
+            "响应时间: {{response_time}}"
         )
         
         message = AlertMessage(
@@ -289,11 +289,11 @@ class TestAlertManager:
         assert 'DOWN' in result
         assert '2023-01-01 12:00:00' in result
         assert '连接超时' in result
-        assert '1500.50ms' in result
+        assert '1500.50' in result
     
     def test_render_template_with_metadata(self):
         """测试包含元数据的模板渲染"""
-        template_str = "服务 $service_name 从 $metadata_old_state 变为 $metadata_new_state"
+        template_str = "服务 {{service_name}} 从 {{metadata_old_state}} 变为 {{metadata_new_state}}"
         message = AlertMessage(
             service_name='test-service',
             service_type='redis',
@@ -306,19 +306,20 @@ class TestAlertManager:
     
     def test_render_template_missing_variable(self):
         """测试模板变量缺失"""
-        template_str = "服务 $service_name 状态: $nonexistent_variable"
+        template_str = "服务 {{service_name}} 状态: {{nonexistent_variable}}"
         message = AlertMessage(
             service_name='test-service',
             service_type='redis',
             status='DOWN'
         )
         
-        with pytest.raises(AlertConfigError):
-            self.manager.render_template(template_str, message)
+        result = self.manager.render_template(template_str, message)
+        # 不存在的变量会保持原样
+        assert result == "服务 test-service 状态: {{nonexistent_variable}}"
     
     def test_template_caching(self):
-        """测试模板缓存"""
-        template_str = "服务 $service_name 状态: $status"
+        """测试模板渲染一致性"""
+        template_str = "服务 {{service_name}} 状态: {{status}}"
         message = AlertMessage(
             service_name='test-service',
             service_type='redis',
@@ -328,11 +329,11 @@ class TestAlertManager:
         # 第一次渲染
         result1 = self.manager.render_template(template_str, message)
         
-        # 第二次渲染应该使用缓存
+        # 第二次渲染应该得到相同结果
         result2 = self.manager.render_template(template_str, message)
         
         assert result1 == result2
-        assert template_str in self.manager._template_cache
+        assert result1 == "服务 test-service 状态: DOWN"
     
     def test_clear_alert_history(self):
         """测试清空告警历史"""

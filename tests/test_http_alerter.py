@@ -167,7 +167,7 @@ class TestHTTPAlerter:
     def test_prepare_request_data_post_with_template(self):
         """测试准备POST请求数据（使用模板）"""
         config = self.valid_config.copy()
-        config['template'] = '{"message": "服务 $service_name 状态: $status"}'
+        config['template'] = '{"message": "服务 {{service_name}} 状态: {{status}}"}'
         
         alerter = HTTPAlerter('test-alerter', config)
         request_data = alerter._prepare_request_data(self.alert_message)
@@ -178,7 +178,7 @@ class TestHTTPAlerter:
     def test_prepare_request_data_post_with_text_template(self):
         """测试准备POST请求数据（文本模板）"""
         config = self.valid_config.copy()
-        config['template'] = '服务 $service_name 状态: $status'
+        config['template'] = '服务 {{service_name}} 状态: {{status}}'
         
         alerter = HTTPAlerter('test-alerter', config)
         request_data = alerter._prepare_request_data(self.alert_message)
@@ -339,7 +339,7 @@ class TestHTTPAlerter:
     def test_get_config_summary_with_template(self):
         """测试包含模板的配置摘要"""
         config = self.valid_config.copy()
-        config['template'] = '{"message": "$service_name"}'
+        config['template'] = '{"message": "{{service_name}}"}'
         
         alerter = HTTPAlerter('test-alerter', config)
         summary = alerter.get_config_summary()

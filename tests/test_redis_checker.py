@@ -71,7 +71,8 @@ class TestRedisHealthChecker:
         config = {
             'host': 'localhost',
             'port': 6379,
-            'database': 0
+            'database': 0,
+            'use_connection_pool': False  # 禁用连接池，这样会调用aclose
         }
         
         checker = RedisHealthChecker('test-redis', config)

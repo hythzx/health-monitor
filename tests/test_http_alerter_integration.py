@@ -23,7 +23,7 @@ class TestHTTPAlerterIntegration:
                 'headers': {
                     'Content-Type': 'application/json'
                 },
-                'template': '{"text": "🚨 服务告警\\n服务: $service_name\\n状态: $status\\n时间: $timestamp"}'
+                'template': '{"text": "🚨 服务告警\\n服务: {{service_name}}\\n状态: {{status}}\\n时间: {{timestamp}}"}'
             }
         ]
         
@@ -45,7 +45,7 @@ class TestHTTPAlerterIntegration:
             'url': 'https://api.example.com/webhook',
             'method': 'POST',
             'headers': {'Content-Type': 'application/json'},
-            'template': '{"message": "服务 $service_name 状态变为 $status"}'
+            'template': '{"message": "服务 {{service_name}} 状态变为 {{status}}"}'
         }
         
         alerter = HTTPAlerter('test-webhook', http_config)
@@ -119,14 +119,14 @@ class TestHTTPAlerterIntegration:
         # 创建带有复杂模板的HTTP告警器
         template = '''
         {
-            "service": "$service_name",
-            "type": "$service_type", 
-            "status": "$status",
-            "time": "$timestamp",
-            "error": "$error_message",
-            "response_time": "$response_time",
-            "old_state": "$metadata_old_state",
-            "new_state": "$metadata_new_state"
+            "service": "{{service_name}}",
+            "type": "{{service_type}}", 
+            "status": "{{status}}",
+            "time": "{{timestamp}}",
+            "error": "{{error_message}}",
+            "response_time": "{{response_time}}",
+            "old_state": "{{metadata_old_state}}",
+            "new_state": "{{metadata_new_state}}"
         }
         '''
         

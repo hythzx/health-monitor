@@ -47,24 +47,24 @@ class TestEndToEndAlertFlow:
                 'max_retries': 0,  # 禁用重试，简化测试
                 'template': '''
                 {
-                    "text": "Service Alert: $service_name is $status",
+                    "text": "Service Alert: {{service_name}} is {{status}}",
                     "attachments": [
                         {
                             "color": "danger",
                             "fields": [
                                 {
                                     "title": "Service",
-                                    "value": "$service_name",
+                                    "value": "{{service_name}}",
                                     "short": true
                                 },
                                 {
                                     "title": "Status",
-                                    "value": "$status",
+                                    "value": "{{status}}",
                                     "short": true
                                 },
                                 {
                                     "title": "Error",
-                                    "value": "$error_message",
+                                    "value": "{{error_message}}",
                                     "short": false
                                 }
                             ]
