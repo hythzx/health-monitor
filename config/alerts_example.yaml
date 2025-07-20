@@ -1,0 +1,188 @@
+# 告警配置示例文件
+# 展示如何配置HTTP、邮件和阿里云短信告警器
+
+# 全局配置
+global:
+  check_interval: 30  # 默认检查间隔（秒）
+  log_level: INFO
+  log_file: /var/log/health-monitor.log
+
+# 服务监控配置
+services:
+  redis-cache:
+    type: redis
+    host: localhost
+    port: 6379
+    password: "your_password"
+    database: 0
+    timeout: 5
+    check_interval: 10
+    
+  user-database:
+    type: mysql
+    host: localhost
+    port: 3306
+    username: monitor_user
+    password: "db_password"
+    database: users
+    timeout: 10
+    check_interval: 30
+
+# 告警配置
+alerts:
+  # HTTP告警器 - 钉钉机器人
+  - name: dingtalk-robot
+    type: http
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "msgtype": "text",
+        "text": {
+          "content": "🚨 服务告警\n服务名称: {{service_name}}\n服务类型: {{service_type}}\n状态: {{status}}\n时间: {{timestamp}}\n错误信息: {{error_message}}\n响应时间: {{response_time}}ms"
+        }
+      }
+    max_retries: 3
+    retry_delay: 1.0
+    timeout: 30
+    
+  # HTTP告警器 - 自定义Webhook
+  - name: webhook-alert
+    type: http
+    url: "https://your-webhook.com/alerts"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "your-api-key"
+    template: |
+      {
+        "service": "{{service_name}}",
+        "type": "{{service_type}}",
+        "status": "{{status}}",
+        "timestamp": "{{timestamp}}",
+        "error": "{{error_message}}",
+        "response_time": {{response_time}}
+      }
+    max_retries: 2
+    retry_delay: 2.0
+    
+  # 邮件告警器 - Gmail SMTP
+  - name: gmail-alert
+    type: email
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+    username: "your-email@gmail.com"
+    password: "your-app-password"  # 使用应用专用密码
+    use_tls: true
+    from_email: "your-email@gmail.com"
+    from_name: "服务健康监控系统"
+    to_emails:
+      - "admin@company.com"
+      - "ops@company.com"
+    cc_emails:
+      - "manager@company.com"
+    subject_template: "🚨 服务告警: {{service_name}} - {{status}}"
+    body_template: |
+      服务健康监控告警通知
+      
+      ==========================================
+      告警详情
+      ==========================================
+      服务名称: {{service_name}}
+      服务类型: {{service_type}}
+      当前状态: {{status}}
+      发生时间: {{timestamp}}
+      响应时间: {{response_time}}ms
+      错误信息: {{error_message}}
+      
+      ==========================================
+      处理建议
+      ==========================================
+      1. 请立即检查服务状态
+      2. 查看相关日志文件
+      3. 如需要，请联系技术支持
+      
+      请及时处理相关问题！
+      
+      ---
+      此邮件由服务健康监控系统自动发送，请勿回复。
+    max_retries: 3
+    retry_delay: 2.0
+    timeout: 30
+    
+  # 邮件告警器 - 企业邮箱 SMTP
+  - name: enterprise-email
+    type: email
+    smtp_server: smtp.exmail.qq.com
+    smtp_port: 465
+    username: "monitor@company.com"
+    password: "your-password"
+    use_ssl: true  # 使用SSL而不是TLS
+    from_email: "monitor@company.com"
+    from_name: "监控系统"
+    to_emails:
+      - "it-team@company.com"
+    subject_template: "[{{status}}] {{service_name}} 服务告警"
+    body_template: |
+      {{service_name}} 服务状态变更通知
+      
+      状态: {{status}}
+      时间: {{timestamp}}
+      错误: {{error_message}}
+      
+      请及时处理。
+    max_retries: 2
+    retry_delay: 1.5
+    
+  # 阿里云短信告警器
+  - name: aliyun-sms-alert
+    type: aliyun_sms
+    access_key_id: "YOUR_ACCESS_KEY_ID"
+    access_key_secret: "YOUR_ACCESS_KEY_SECRET"
+    region: "cn-hangzhou"
+    sign_name: "您的签名"
+    template_code: "SMS_123456789"  # 您的短信模板代码
+    phone_numbers:
+      - "13800138000"  # 管理员手机号
+      - "13900139000"  # 运维人员手机号
+    template_params:
+      service: "{{service_name}}"
+      status: "{{status}}"
+      time: "{{timestamp}}"
+    max_retries: 3
+    retry_delay: 1.0
+    batch_size: 100  # 批量发送大小
+    timeout: 30
+    
+  # 阿里云短信告警器 - 紧急通知
+  - name: emergency-sms
+    type: aliyun_sms
+    access_key_id: "YOUR_ACCESS_KEY_ID"
+    access_key_secret: "YOUR_ACCESS_KEY_SECRET"
+    region: "cn-shanghai"
+    sign_name: "紧急通知"
+    template_code: "SMS_987654321"
+    phone_numbers:
+      - "13800138000"  # 技术负责人
+    template_params:
+      service: "{{service_name}}"
+      error: "{{error_message}}"
+    max_retries: 5  # 紧急通知增加重试次数
+    retry_delay: 0.5  # 缩短重试间隔
+    batch_size: 50
+
+# 告警过滤配置（可选）
+alert_filters:
+  # 只在工作时间发送邮件告警
+  - type: time_filter
+    quiet_hours:
+      - [22, 8]  # 晚上10点到早上8点静默
+  
+  # 只对关键服务发送短信告警
+  - type: service_filter
+    critical_services:
+      - "user-database"
+      - "payment-service"
+      - "auth-service"

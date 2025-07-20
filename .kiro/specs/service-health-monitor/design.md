@@ -26,6 +26,8 @@ graph TB
     
     I --> J[告警管理器]
     J --> K[HTTP告警器]
+    J --> O[邮件告警器]
+    J --> P[阿里云短信告警器]
     
     L[日志管理器] --> M[文件日志]
     L --> N[控制台日志]
@@ -196,6 +198,16 @@ class HTTPAlerter(BaseAlerter):
     async def send_alert(self, message: AlertMessage):
         """通过HTTP请求发送告警"""
         pass
+
+class EmailAlerter(BaseAlerter):
+    async def send_alert(self, message: AlertMessage):
+        """通过SMTP邮件发送告警"""
+        pass
+
+class AliyunSMSAlerter(BaseAlerter):
+    async def send_alert(self, message: AlertMessage):
+        """通过阿里云短信平台发送告警"""
+        pass
 ```
 
 ## 数据模型
@@ -273,6 +285,45 @@ alerts:
           "content": "🚨 服务告警\n服务名称: {{service_name}}\n状态: {{status}}\n时间: {{timestamp}}\n错误信息: {{error_message}}"
         }
       }
+    
+  - name: email-alert
+    type: email
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+    username: "your-email@gmail.com"
+    password: "your-app-password"
+    use_tls: true
+    from_email: "your-email@gmail.com"
+    to_emails:
+      - "admin@company.com"
+      - "ops@company.com"
+    subject_template: "🚨 服务告警: {{service_name}} - {{status}}"
+    body_template: |
+      服务告警通知
+      
+      服务名称: {{service_name}}
+      服务类型: {{service_type}}
+      当前状态: {{status}}
+      发生时间: {{timestamp}}
+      响应时间: {{response_time}}ms
+      错误信息: {{error_message}}
+      
+      请及时处理！
+    
+  - name: aliyun-sms
+    type: aliyun_sms
+    access_key_id: "YOUR_ACCESS_KEY_ID"
+    access_key_secret: "YOUR_ACCESS_KEY_SECRET"
+    region: "cn-hangzhou"
+    sign_name: "您的签名"
+    template_code: "SMS_123456789"
+    phone_numbers:
+      - "13800138000"
+      - "13900139000"
+    template_params:
+      service_name: "{{service_name}}"
+      status: "{{status}}"
+      time: "{{timestamp}}"
     
   - name: webhook-alert
     type: http

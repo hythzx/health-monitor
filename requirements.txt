@@ -14,6 +14,10 @@ aiomysql>=0.1.1
 watchdog>=3.0.0
 psutil>=5.9.0
 
+# Alert notifications
+aiosmtplib>=2.0.0  # 异步SMTP客户端
+alibabacloud_dysmsapi20170525>=3.0.0  # 阿里云短信服务SDK
+
 # Development and testing dependencies
 pytest>=7.0.0
 pytest-asyncio>=0.21.0

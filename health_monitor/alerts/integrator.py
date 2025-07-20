@@ -7,6 +7,8 @@ import logging
 from typing import Dict, List, Any, Callable
 
 from .http_alerter import HTTPAlerter
+from .email_alerter import EmailAlerter
+from .aliyun_sms_alerter import AliyunSMSAlerter
 from .manager import AlertManager
 from ..models.health_check import HealthCheckResult, StateChange
 from ..services.state_manager import StateManager
@@ -54,6 +56,14 @@ class AlertIntegrator:
                     alerter = HTTPAlerter(alerter_name, config)
                     self.alert_manager.add_alerter(alerter)
                     self.logger.info(f"已初始化HTTP告警器: {alerter_name}")
+                elif alerter_type == 'email':
+                    alerter = EmailAlerter(alerter_name, config)
+                    self.alert_manager.add_alerter(alerter)
+                    self.logger.info(f"已初始化邮件告警器: {alerter_name}")
+                elif alerter_type == 'aliyun_sms':
+                    alerter = AliyunSMSAlerter(alerter_name, config)
+                    self.alert_manager.add_alerter(alerter)
+                    self.logger.info(f"已初始化阿里云短信告警器: {alerter_name}")
                 else:
                     self.logger.warning(f"不支持的告警器类型: {alerter_type}")
 
