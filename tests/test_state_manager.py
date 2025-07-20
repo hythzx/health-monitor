@@ -315,7 +315,14 @@ class TestStateManager:
         assert stats["health_rate"] == 0.75
         assert stats["avg_response_time"] == (0.1 + 0.2 + 5.0 + 0.15) / 4
         assert stats["state_changes_count"] == 2  # True->False, False->True
-        assert stats["latest_check"] == results[-1]
+        # 比较latest_check的各个属性而不是对象本身
+        latest_check = stats["latest_check"]
+        expected_check = results[-1]
+        assert latest_check.service_name == expected_check.service_name
+        assert latest_check.service_type == expected_check.service_type
+        assert latest_check.is_healthy == expected_check.is_healthy
+        assert latest_check.response_time == expected_check.response_time
+        assert latest_check.error_message == expected_check.error_message
     
     def test_get_service_stats_empty(self):
         """测试获取不存在服务的统计信息"""

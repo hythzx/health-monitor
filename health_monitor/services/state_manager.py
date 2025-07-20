@@ -290,8 +290,8 @@ class StateManager:
         avg_response_time = sum(response_times) / len(
             response_times) if response_times else 0
 
-        # 最近的检查结果
-        latest_check = max(service_history, key=lambda x: x.timestamp)
+        # 最近的检查结果（按时间戳排序后取最后一个）
+        latest_check = sorted(service_history, key=lambda x: x.timestamp)[-1]
 
         return {
             'service_name': service_name,
