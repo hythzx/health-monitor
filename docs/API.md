@@ -796,3 +796,44 @@ def load_plugins():
 ### 连接池清理
 
 `ConnectionPoolManager` 的 MongoDB 连接池使用 `pymongo.AsyncMongoClient`。清理接口为异步方法，调用方需要使用 `await manager.remove_pool(pool_key)` 或 `await manager.cleanup_all_pools()`，以等待驱动释放连接。同步关闭方法也兼容。
+
+## 数据库管理接口
+
+所有 `/api/` 接口要求 `Authorization: Bearer <HEALTH_MONITOR_WEB_TOKEN>`，写入要求 `Content-Type: application/json`。仅管理用户可访问配置，其中包含连接和通知凭据。不要将此接口公开给非管理用户。
+
+### 配置
+
+`GET /api/settings` 返回 `{"config":{"global":{},"services":{},"alerts":[]},"revision":"1"}`。
+
+`PUT /api/settings` 提交同样的结构，完成整份配置替换。新增、修改、删除监控项或渠道后，必须携带最近一次读取的 `revision`。写入前校验所有检查器及通知渠道；无效配置返回 400，版本冲突返回 409。配置写入和运行时应用失败会回滚，原 YAML 不会改写。单个进程负责监控调度，不支持多个调度实例共用同一个数据库并同时运行。
+
+保留 `GET /api/config`、`POST /api/config/validate` 和 `PUT /api/config`，用于 YAML 导出、校验和显式导入；数据库模式下保存到 SQLite。原 YAML 仅在数据库无配置时导入，之后不再监听该文件。
+
+### 历史
+
+`GET /api/history/{kind}`，kind 为 `checks`（每次检查）、`events`（异常与恢复）、`logs`（运行日志）、`errors`（ERROR / CRITICAL 日志视图）、`deliveries`（每个通知渠道的投递结果）。返回 `{"total":123,"items":[...]}`。
+
+| 参数 | 说明 |
+| --- | --- |
+| limit / offset | 默认 50 / 0；limit 为 1–100，offset 非负 |
+| service | 精确匹配服务名，删除配置后仍可查询该服务的历史 |
+| status | 检查及预警为 UP / DOWN；投递为 SENT / FAILED |
+| level | 日志级别，仅适用于 logs / errors |
+| search | 搜索详情中的关键字 |
+| since / until | ISO 8601 时间，必须包含时区，例如 `2026-11-13T00:00:00+08:00`，URL 中的 `+` 需编码 |
+
+投递记录中 `SENT` 表示通知渠道返回成功，不代表最终收件人已阅读。未配置渠道、被过滤或去重时不会产生投递记录；已有旧版记录不能补算实际投递状态。
+
+### 保留与清理
+
+`GET /api/retention` 返回 `{"retention_days":30,"max_rows":10000}`。
+
+`PUT /api/retention` 提交同样的结构；保留天数为 1–3650，单类条数上限为 100–1000000。时间保留策略在启动时和每小时执行，行数上限在写入时执行。
+
+`POST /api/history/cleanup`：
+
+```json
+{"kind":"all","before":"2026-11-01T00:00:00+08:00","confirm":true}
+```
+
+返回 `{"deleted":{"checks":20,"events":3,"logs":10,"deliveries":2}}`。kind 可以为 all 或上述单类历史名。删除严格早于 before 的记录；不允许未来时间，必须显式 confirm。不会删除配置及最新服务状态。删除 errors 仅删除错误日志，删除 logs 会同时删除其中的错误日志。数据库文件释放的空间留待后续写入复用。

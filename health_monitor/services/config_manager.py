@@ -11,15 +11,16 @@ from ..utils.log_manager import get_logger
 
 
 class ConfigManager:
-    """配置管理器，负责YAML配置文件的加载、解析和验证"""
+    """配置管理器：数据库为主，YAML 用于首次导入或兼容文件模式"""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, store=None):
         """
         初始化配置管理器
         
         Args:
             config_path: 配置文件路径
         """
+        self.store = store
         self.config_path = config_path
         self.config: Dict[str, Any] = {}
         self.last_modified: Optional[float] = None
@@ -35,6 +36,17 @@ class ConfigManager:
         Raises:
             ConfigError: 配置加载或验证失败
         """
+        if self.store:
+            snapshot = self.store.config_snapshot()
+            if snapshot:
+                self._validate_config(snapshot['config'])
+                self.config = snapshot['config']
+                return self.config
+            if not self.config_path:
+                self.config = {'global': {}, 'services': {}, 'alerts': []}
+                with self.store.transaction():
+                    self.store.save_config(self.config)
+                return self.config
         self.logger.info(f"开始加载配置文件: {self.config_path}")
 
         try:
@@ -64,6 +76,10 @@ class ConfigManager:
             old_config = self.config.copy() if self.config else {}
             self.config = config
             self.last_modified = os.path.getmtime(self.config_path)
+            if self.store:
+                with self.store.transaction():
+                    self.store.save_config(config)
+                self.store.update_secrets(config)
 
             # 记录配置变更
             if old_config:
@@ -166,6 +182,8 @@ class ConfigManager:
         Returns:
             bool: 配置文件是否已修改
         """
+        if self.store:
+            return False
         try:
             if not os.path.exists(self.config_path):
                 return False

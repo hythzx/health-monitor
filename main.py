@@ -30,7 +30,7 @@ from health_monitor import __version__
 class HealthMonitorApp:
     """健康监控系统主应用程序类"""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, database_path=None):
         """初始化应用程序
         
         Args:
@@ -52,12 +52,17 @@ class HealthMonitorApp:
         self.background_tasks = set()
         self.web_server = None
         self.event_store = None
+        self.database_path = database_path
+        self.database_log_handler = None
 
     async def initialize(self):
         """初始化应用程序组件"""
         try:
             # 初始化配置管理器
-            self.config_manager = ConfigManager(self.config_path)
+            if self.database_path:
+                from health_monitor.services.event_store import EventStore
+                self.event_store = EventStore(self.database_path)
+            self.config_manager = ConfigManager(self.config_path, self.event_store)
             config = self.config_manager.load_config()
 
             # 配置日志系统
@@ -81,6 +86,17 @@ class HealthMonitorApp:
             global_config = self.config_manager.get_global_config()
             self.monitor_scheduler.configure_services(services_config, global_config)
 
+            if self.database_path:
+                from datetime import datetime
+                from health_monitor.models.health_check import HealthCheckResult
+                for row in self.event_store.latest_checks():
+                    if row['service'] in services_config and services_config[row['service']]['type'] == row['type']:
+                        result = HealthCheckResult(row['service'], row['type'], row['status'] == 'UP',
+                                                   row['response_time'], row['message'],
+                                                   datetime.fromisoformat(row['timestamp']).astimezone().replace(tzinfo=None))
+                        self.state_manager.current_states[row['service']] = result.is_healthy
+                        self.state_manager.state_history.append(result)
+
             # 初始化告警集成器
             alerts_config = self.config_manager.get_alerts_config()
             self.alert_integrator = AlertIntegrator(self.state_manager, alerts_config)
@@ -100,6 +116,15 @@ class HealthMonitorApp:
             self.config_watcher = ConfigWatcher(self.config_manager)
             self.config_watcher.add_change_callback(self._on_config_changed_callback)
 
+            if self.event_store:
+                from health_monitor.services.event_store import DatabaseLogHandler
+                self.database_log_handler = DatabaseLogHandler(self.event_store)
+                log_manager.database_handler = self.database_log_handler
+                for logger in log_manager._loggers.values():
+                    logger.addHandler(self.database_log_handler)
+                logging.getLogger().addHandler(self.database_log_handler)
+                self.event_store.cleanup()
+                self.alert_integrator.alert_manager.delivery_callback = self.event_store.record_delivery
             self.logger.info("应用程序组件初始化完成")
 
         except Exception as e:
@@ -110,6 +135,11 @@ class HealthMonitorApp:
             raise
 
     async def _process_health_check_result(self, result):
+        if self.event_store:
+            try:
+                self.event_store.record_check(result)
+            except Exception:
+                self.logger.error("检查历史写入失败，请检查磁盘；继续更新状态和发送通知")
         previous = self.state_manager.get_current_state(result.service_name)
         if self.event_store and previous != result.is_healthy:
             if previous is not None or not result.is_healthy:
@@ -162,7 +192,7 @@ class HealthMonitorApp:
             service_name: 服务名称
             error: 错误信息
         """
-        self.logger.error(f"服务 {service_name} 健康检查错误: {error}")
+        self.logger.error(f"服务 {service_name} 健康检查错误: {error}", extra={"service": service_name})
 
     async def _handle_performance_alert(self, metric_name: str, current_value: float,
                                         threshold: float):
@@ -221,15 +251,13 @@ class HealthMonitorApp:
             if self.web_server:
                 await self.web_server.start()
 
-            # 启动配置监控器
-            self.config_watcher.start_watching()
-
-            # 启动异步配置监控任务
-            config_watcher_task = asyncio.create_task(
-                self.config_watcher.watch_config_changes_async()
-            )
-            self.background_tasks.add(config_watcher_task)
-            config_watcher_task.add_done_callback(self.background_tasks.discard)
+            if not self.database_path:
+                self.config_watcher.start_watching()
+                task = asyncio.create_task(self.config_watcher.watch_config_changes_async())
+            else:
+                task = asyncio.create_task(self._maintain_history())
+            self.background_tasks.add(task)
+            task.add_done_callback(self.background_tasks.discard)
 
             # 启动监控调度器
             scheduler_task = asyncio.create_task(self.monitor_scheduler.start())
@@ -247,11 +275,20 @@ class HealthMonitorApp:
         finally:
             await self.stop()
 
+    async def _maintain_history(self):
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                self.event_store.cleanup()
+            except Exception:
+                self.logger.error('定时清理历史失败，请检查数据库')
+
     async def stop(self):
         """停止应用程序"""
-        if not self.is_running:
+        if not self.is_running and not self.event_store:
             return
 
+        self.logger = self.logger or get_logger("main")
         self.logger.info("正在停止健康监控系统...")
         self.is_running = False
 
@@ -282,6 +319,12 @@ class HealthMonitorApp:
             if self.state_manager:
                 self.state_manager.cleanup_history()
 
+            if self.database_log_handler:
+                logging.getLogger().removeHandler(self.database_log_handler)
+                for logger in log_manager._loggers.values():
+                    logger.removeHandler(self.database_log_handler)
+                log_manager.database_handler = None
+                self.database_log_handler = None
             if self.event_store:
                 self.event_store.close()
                 self.event_store = None
@@ -378,7 +421,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument('--web', action='store_true', help='启用 Web 管理界面（需要环境变量 HEALTH_MONITOR_WEB_TOKEN）')
     parser.add_argument('--web-host', default='127.0.0.1', help='Web 监听地址，默认 127.0.0.1')
     parser.add_argument('--web-port', type=int, default=8080)
-    parser.add_argument('--events-db', default='data/events.sqlite3', help='预警历史 SQLite 文件')
+    parser.add_argument('--database', '--events-db', dest='events_db', default='data/events.sqlite3', help='SQLite 数据库（配置及全部历史，兼容旧 --events-db 参数）')
 
     # 位置参数：配置文件路径
     parser.add_argument(
@@ -610,14 +653,14 @@ async def main():
     args = parser.parse_args()
 
     # 检查配置文件参数
-    if not args.config_file:
+    if not args.config_file and not args.web:
         parser.print_help()
         sys.exit(1)
 
     config_path = args.config_file
 
     # 检查配置文件是否存在
-    if not os.path.exists(config_path):
+    if config_path and not os.path.exists(config_path) and not os.path.exists(args.events_db):
         print(f"配置文件不存在: {config_path}", file=sys.stderr)
         sys.exit(1)
 
@@ -640,23 +683,7 @@ async def main():
 
     try:
         # 创建应用程序实例
-        app = HealthMonitorApp(config_path)
-
-        # 应用命令行参数覆盖
-        if args.log_level or args.log_file:
-            # 预先加载配置以应用命令行参数
-            config_manager = ConfigManager(config_path)
-            config = config_manager.load_config()
-
-            # 覆盖日志配置
-            global_config = config.get('global', {})
-            if args.log_level:
-                global_config['log_level'] = args.log_level
-            if args.log_file:
-                global_config['log_file'] = args.log_file
-
-            # 重新配置日志
-            app._configure_logging(global_config)
+        app = HealthMonitorApp(config_path, database_path=args.events_db)
 
         # 注册信号处理器
         signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
@@ -664,17 +691,22 @@ async def main():
 
         # 初始化并启动应用程序
         await app.initialize()
+        if args.log_level or args.log_file:
+            global_config = dict(app.config_manager.get_global_config())
+            if args.log_level:
+                global_config['log_level'] = args.log_level
+            if args.log_file:
+                global_config['log_file'] = args.log_file
+            app._configure_logging(global_config)
         if args.web:
             from health_monitor.web import WebServer
-            from health_monitor.services.event_store import EventStore
             app.web_server = WebServer(app, os.environ.get('HEALTH_MONITOR_WEB_TOKEN'),
                                        args.web_host, args.web_port)
-            app.event_store = EventStore(args.events_db)
 
         # 显示启动信息
         if not args.daemon:
             print(f"健康监控系统 v{__version__} 已启动")
-            print(f"配置文件: {config_path}")
+            print(f"配置文件: {config_path}" if config_path else f"配置数据库: {args.events_db}")
             print("按 Ctrl+C 停止程序")
 
         await app.start()

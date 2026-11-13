@@ -121,6 +121,13 @@ class LogManager:
         if 'date_format' in config:
             self._date_format = config['date_format']
 
+        # Existing monitor loggers must also follow live changes.
+        for logger in self._loggers.values():
+            logger.setLevel(self._log_level.value)
+            for handler in logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(self._log_level.value)
+
     def get_logger(self, name: str) -> logging.Logger:
         """
         获取指定名称的日志记录器
@@ -169,6 +176,9 @@ class LogManager:
             )
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
+
+        if getattr(self, "database_handler", None):
+            logger.addHandler(self.database_handler)
 
         # 防止日志向上传播
         logger.propagate = False

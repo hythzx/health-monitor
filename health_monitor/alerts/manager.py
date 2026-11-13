@@ -86,13 +86,24 @@ class AlertManager:
 
         # 并发发送到所有告警器
         tasks = []
-        for alerter in self.alerters:
+        alerters = list(self.alerters)
+        for alerter in alerters:
             task = self._send_to_alerter(alerter, alert_message)
             tasks.append(task)
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             self._log_send_results(results, alert_message)
+            callback = getattr(self, 'delivery_callback', None)
+            if callback:
+                for alerter, result in zip(alerters, results):
+                    try:
+                        success = isinstance(result, dict) and result.get('success', False)
+                        error = result.get('error') if isinstance(result, dict) else type(result).__name__
+                        callback(alert_message.service_name, alerter.name, success,
+                                 error or ('渠道返回成功' if success else '渠道返回失败'))
+                    except Exception:
+                        self.logger.error('通知投递结果写入失败，请检查数据库')
 
     async def _send_to_alerter(self, alerter: BaseAlerter, message: AlertMessage) -> Dict[
         str, Any]:
