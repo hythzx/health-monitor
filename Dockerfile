@@ -2,7 +2,7 @@
 # 多阶段构建，优化镜像大小
 
 # 构建阶段
-FROM python:3.11-slim as builder
+FROM python:3.13-slim AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -25,15 +25,15 @@ RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 运行阶段
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # 设置标签
 LABEL maintainer="hythzx" \
       description="服务健康监控和报警系统" \
-      version="1.0.0"
+      version="1.1.0"
 
 # 创建非root用户
-RUN groupadd -r monitor && useradd -r -g monitor monitor
+RUN groupadd -g 10001 monitor && useradd -u 10001 -g monitor -M monitor
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y \
@@ -51,7 +51,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY . .
 
 # 创建必要的目录
-RUN mkdir -p /app/logs /app/config && \
+RUN mkdir -p /app/logs /app/config /app/data && \
     chown -R monitor:monitor /app
 
 # 切换到非root用户
@@ -70,4 +70,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8080
 
 # 启动命令
-CMD ["python", "main.py", "config/config.yaml"] 
+CMD ["python", "main.py", "config/config.yaml", "--web", "--web-host", "0.0.0.0"]

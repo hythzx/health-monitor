@@ -24,7 +24,7 @@ from health_monitor.utils.exceptions import HealthMonitorError, ConfigError
 from health_monitor.utils.log_manager import log_manager, get_logger
 
 # 版本信息
-__version__ = "1.0.0"
+from health_monitor import __version__
 
 
 class HealthMonitorApp:
@@ -50,6 +50,8 @@ class HealthMonitorApp:
 
         # 任务管理
         self.background_tasks = set()
+        self.web_server = None
+        self.event_store = None
 
     async def initialize(self):
         """初始化应用程序组件"""
@@ -85,7 +87,7 @@ class HealthMonitorApp:
 
             # 设置监控调度器回调
             self.monitor_scheduler.set_check_result_callback(
-                self.alert_integrator.process_health_check_result
+                self._process_health_check_result
             )
             self.monitor_scheduler.set_check_error_callback(
                 self._handle_check_error
@@ -106,6 +108,17 @@ class HealthMonitorApp:
             else:
                 print(f"应用程序初始化失败: {e}", file=sys.stderr)
             raise
+
+    async def _process_health_check_result(self, result):
+        previous = self.state_manager.get_current_state(result.service_name)
+        if self.event_store and previous != result.is_healthy:
+            if previous is not None or not result.is_healthy:
+                try:
+                    self.event_store.record(result)
+                except Exception:
+                    self.logger.error("预警历史写入失败，请检查磁盘；继续更新状态和发送通知")
+        await self.alert_integrator.process_health_check_result(result)
+        self.state_manager.cleanup_history()
 
     def _configure_logging(self, global_config: Dict[str, Any]):
         """配置日志系统
@@ -184,10 +197,16 @@ class HealthMonitorApp:
             alerts_config = new_config.get('alerts', [])
             self.alert_integrator.reload_alert_config(alerts_config)
 
+            concurrent = global_config.get('max_concurrent_checks', 10)
+            if concurrent != self.monitor_scheduler.max_concurrent_checks:
+                self.monitor_scheduler.max_concurrent_checks = concurrent
+                if self.monitor_scheduler.is_running:
+                    self.monitor_scheduler.semaphore = asyncio.Semaphore(concurrent)
             self.logger.info("配置重新加载完成")
 
         except Exception as e:
-            self.logger.error(f"重新加载配置失败: {e}", exc_info=True)
+            self.logger.error("重新加载配置失败", exc_info=True)
+            raise
 
     async def start(self):
         """启动应用程序"""
@@ -198,6 +217,9 @@ class HealthMonitorApp:
         try:
             self.is_running = True
             self.logger.info("启动健康监控系统")
+
+            if self.web_server:
+                await self.web_server.start()
 
             # 启动配置监控器
             self.config_watcher.start_watching()
@@ -234,6 +256,9 @@ class HealthMonitorApp:
         self.is_running = False
 
         try:
+            if self.web_server:
+                await self.web_server.stop()
+
             # 停止监控调度器
             if self.monitor_scheduler:
                 await self.monitor_scheduler.stop()
@@ -256,6 +281,10 @@ class HealthMonitorApp:
             # 清理状态管理器
             if self.state_manager:
                 self.state_manager.cleanup_history()
+
+            if self.event_store:
+                self.event_store.close()
+                self.event_store = None
 
             # 清理日志管理器
             log_manager.cleanup()
@@ -345,6 +374,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
 配置文件格式请参考 config/example.yaml
         """
     )
+
+    parser.add_argument('--web', action='store_true', help='启用 Web 管理界面（需要环境变量 HEALTH_MONITOR_WEB_TOKEN）')
+    parser.add_argument('--web-host', default='127.0.0.1', help='Web 监听地址，默认 127.0.0.1')
+    parser.add_argument('--web-port', type=int, default=8080)
+    parser.add_argument('--events-db', default='data/events.sqlite3', help='预警历史 SQLite 文件')
 
     # 位置参数：配置文件路径
     parser.add_argument(
@@ -630,6 +664,12 @@ async def main():
 
         # 初始化并启动应用程序
         await app.initialize()
+        if args.web:
+            from health_monitor.web import WebServer
+            from health_monitor.services.event_store import EventStore
+            app.web_server = WebServer(app, os.environ.get('HEALTH_MONITOR_WEB_TOKEN'),
+                                       args.web_host, args.web_port)
+            app.event_store = EventStore(args.events_db)
 
         # 显示启动信息
         if not args.daemon:

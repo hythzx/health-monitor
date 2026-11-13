@@ -1,7 +1,7 @@
 """测试MongoDB健康检查器"""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 from health_monitor.checkers.mongodb_checker import MongoHealthChecker
 from health_monitor.models.health_check import HealthCheckResult
 
@@ -272,12 +272,12 @@ class TestMongoHealthChecker:
         
         # 模拟客户端
         mock_client = Mock()
-        mock_client.close = Mock()
+        mock_client.close = AsyncMock()
         checker._client = mock_client
         
         await checker.close()
         
-        mock_client.close.assert_called_once()
+        mock_client.close.assert_awaited_once()
         assert checker._client is None
     
     @pytest.mark.asyncio
@@ -292,7 +292,7 @@ class TestMongoHealthChecker:
         
         # 模拟客户端关闭时抛出异常
         mock_client = Mock()
-        mock_client.close = Mock(side_effect=Exception("Close error"))
+        mock_client.close = AsyncMock(side_effect=Exception("Close error"))
         checker._client = mock_client
         
         # 不应该抛出异常

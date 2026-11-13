@@ -35,6 +35,13 @@ class ConfigFileHandler(FileSystemEventHandler):
             except Exception as e:
                 self.logger.error(f"处理配置变更失败: {e}")
 
+    def on_moved(self, event):
+        if not event.is_directory and event.dest_path == self.config_path:
+            self.callback()
+
+    def on_created(self, event):
+        self.on_modified(event)
+
 
 class ConfigWatcher:
     """配置文件监控器，支持热更新"""
@@ -51,6 +58,7 @@ class ConfigWatcher:
         self.logger = logging.getLogger(__name__)
         self.change_callbacks = []
         self._running = False
+        self._loop = None
 
     def add_change_callback(self, callback: Callable):
         """
@@ -92,6 +100,17 @@ class ConfigWatcher:
         except Exception as e:
             self.logger.error(f"处理配置变更时发生未知错误: {e}")
 
+    def _dispatch_change(self):
+        # watchdog runs on a thread. Runtime mutations belong to the asyncio loop.
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._reload_if_changed)
+        else:
+            self._on_config_changed()
+
+    def _reload_if_changed(self):
+        if self.config_manager.is_config_changed():
+            self._on_config_changed()
+
     def start_watching(self):
         """开始监控配置文件"""
         if self._running:
@@ -102,11 +121,15 @@ class ConfigWatcher:
             import os
             config_dir = os.path.dirname(os.path.abspath(self.config_manager.config_path))
 
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._loop = None
             # 创建文件系统观察者
             self.observer = Observer()
             event_handler = ConfigFileHandler(
                 os.path.abspath(self.config_manager.config_path),
-                self._on_config_changed
+                self._dispatch_change
             )
 
             self.observer.schedule(event_handler, config_dir, recursive=False)

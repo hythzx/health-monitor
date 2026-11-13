@@ -1,24 +1,12 @@
-# Core dependencies
-PyYAML>=6.0
-aiohttp>=3.8.0
-aiomqtt>=2.0.0
-
-# Database connections
-redis>=4.5.0
-pymongo>=4.3.0
-motor>=3.3.0
-PyMySQL>=1.0.0
-aiomysql>=0.1.1
-
-# Logging and monitoring
-watchdog>=3.0.0
-psutil>=5.9.0
-
-# Alert notifications
-aiosmtplib>=2.0.0  # 异步SMTP客户端
-alibabacloud_dysmsapi20170525>=3.0.0  # 阿里云短信服务SDK
-
-# Development and testing dependencies
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.0.0
+# Latest stable versions resolved on 2026-11-13; Python >=3.11
+PyYAML==6.0.3
+aiohttp==3.14.5
+aiomqtt==2.5.1
+redis==8.1.0
+pymongo==4.20.0
+PyMySQL==1.2.4
+aiomysql==0.3.2
+watchdog==7.1.0
+psutil==7.2.2
+aiosmtplib==5.1.3
+alibabacloud_dysmsapi20170525==4.6.0

@@ -217,10 +217,6 @@ class ConfigManager:
             for service_name in set(old_services.keys()) & set(new_services.keys()):
                 if old_services[service_name] != new_services[service_name]:
                     self.logger.info(f"服务配置已修改: {service_name}")
-                    self.logger.debug(
-                        f"服务 {service_name} 旧配置: {old_services[service_name]}")
-                    self.logger.debug(
-                        f"服务 {service_name} 新配置: {new_services[service_name]}")
 
             # 比较告警配置变更
             old_alerts = old_config.get('alerts', [])
@@ -231,8 +227,6 @@ class ConfigManager:
                     f"告警配置数量变更: {len(old_alerts)} -> {len(new_alerts)}")
             elif old_alerts != new_alerts:
                 self.logger.info("告警配置已修改")
-                self.logger.debug(f"旧告警配置: {old_alerts}")
-                self.logger.debug(f"新告警配置: {new_alerts}")
 
             # 比较全局配置变更
             old_global = old_config.get('global', {})
@@ -240,8 +234,6 @@ class ConfigManager:
 
             if old_global != new_global:
                 self.logger.info("全局配置已修改")
-                self.logger.debug(f"旧全局配置: {old_global}")
-                self.logger.debug(f"新全局配置: {new_global}")
 
         except Exception as e:
             self.logger.warning(f"记录配置变更时出错: {e}")

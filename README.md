@@ -1,6 +1,6 @@
 # 服务健康监控系统
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/hythzx/health-monitor)](https://hub.docker.com/r/hythzx/health-monitor)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/hythzx/health-monitor/docker-build.yml?branch=master)](https://github.com/hythzx/health-monitor/actions)
@@ -20,98 +20,21 @@
 
 ## 📋 系统要求
 
-- Python 3.8+
+- Python 3.11+
 - Docker (可选，用于容器化部署)
 - 支持的操作系统：Linux、macOS、Windows
 
 ## 🚀 快速开始
 
-### 方式一：Docker部署（推荐）
+使用下方「Web 管理面板」的源码或 Docker Compose 部署步骤。旧版部署升级时，需要增加管理令牌、可写配置挂载及预警历史目录。
 
-1. **使用预构建镜像**
-
-```bash
-# 拉取最新镜像
-docker pull hythzx/health-monitor:latest
-
-# 创建配置文件
-mkdir -p ./config ./logs
-cp config/basic_example.yaml ./config/config.yaml
-
-# 启动容器
-docker run -d \
-  --name health-monitor \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/logs:/app/logs \
-  hythzx/health-monitor:latest
-```
-
-2. **使用Docker Compose（推荐）**
+只运行监控、不启用 Web 的方式仍然可用：
 
 ```bash
-# 克隆项目
-git clone https://github.com/hythzx/health-monitor.git
-cd health-monitor
-
-# 启动服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f health-monitor
-```
-
-### 方式二：从源码部署
-
-1. **克隆项目**
-
-```bash
-git clone https://github.com/hythzx/health-monitor.git
-cd health-monitor
-```
-
-2. **设置Python环境**
-
-```bash
-# 创建虚拟环境
 python -m venv venv
-
-# 激活虚拟环境
-source venv/bin/activate  # Linux/macOS
-# 或
-venv\Scripts\activate     # Windows
-
-# 安装依赖
+source venv/bin/activate
 pip install -r requirements.txt
-```
-
-3. **配置和启动**
-
-```bash
-# 复制配置模板
-cp config/basic_example.yaml config.yaml
-
-# 编辑配置文件（根据需要修改）
-vim config.yaml
-
-# 启动监控系统
-python main.py config.yaml
-```
-
-### 方式三：开发模式
-
-```bash
-# 克隆项目
-git clone https://github.com/hythzx/health-monitor.git
-cd health-monitor
-
-# 安装开发环境
-pip install -e .
-
-# 运行测试
-pytest
-
-# 启动开发服务器
-python main.py config/development_template.yaml
+python main.py config/config.yaml
 ```
 
 ## 📖 配置说明
@@ -186,76 +109,6 @@ alerts:
 - 📧 **邮件**: 传统邮件通知
 - 🌐 **自定义Webhook**: 集成其他系统
 
-## 🐳 Docker部署详解
-
-### 构建自定义镜像
-
-```bash
-# 克隆项目
-git clone https://github.com/hythzx/health-monitor.git
-cd health-monitor
-
-# 构建镜像
-docker build -t my-health-monitor .
-
-# 运行自定义镜像
-docker run -d \
-  --name health-monitor \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/logs:/app/logs \
-  my-health-monitor
-```
-
-### Docker Compose配置
-
-项目包含完整的`docker-compose.yml`配置：
-
-```yaml
-version: '3.8'
-
-services:
-  health-monitor:
-    image: hythzx/health-monitor:latest
-    container_name: health-monitor
-    volumes:
-      - ./config:/app/config
-      - ./logs:/app/logs
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
-    command: ["python", "main.py", "config/config.yaml"]
-
-  # 示例服务 - Redis
-  redis:
-    image: redis:7-alpine
-    container_name: redis-demo
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-
-  # 示例服务 - MySQL
-  mysql:
-    image: mysql:8.0
-    container_name: mysql-demo
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: testdb
-    ports:
-      - "3306:3306"
-    restart: unless-stopped
-```
-
-### 环境变量配置
-
-```bash
-# .env 文件示例
-HEALTH_MONITOR_LOG_LEVEL=INFO
-HEALTH_MONITOR_CONFIG_PATH=/app/config/config.yaml
-MYSQL_PASSWORD=your_password
-REDIS_PASSWORD=your_redis_password
-DINGTALK_TOKEN=your_dingtalk_token
-```
-
 ## 🔧 命令行选项
 
 ```bash
@@ -277,20 +130,52 @@ python main.py [选项] 配置文件
   --pid-file FILE      PID文件路径
 ```
 
-## 📊 监控面板
+## 📊 Web 管理面板（v1.1）
 
-系统提供简单的状态查询接口：
+提供中文管理界面：服务状态概览、预警与恢复历史（按服务和状态筛选、分页），以及完整 YAML 配置的查看、校验和在线编辑。界面每 10 秒刷新，编辑中的内容不会被自动覆盖。
+
+### 源码启动
+
+Python 3.11+，建议使用 Python 3.13。依赖已按 2026-11-13 可获取的稳定版本固定。
 
 ```bash
-# 查看所有服务状态
-curl http://localhost:8080/status
-
-# 获取特定服务状态
-curl http://localhost:8080/service/{service_name}
-
-# 查看告警统计
-curl http://localhost:8080/alerts/stats
+pip install -r requirements.txt
+export HEALTH_MONITOR_WEB_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# 请自行安全保存该环境变量的值，登录面板时使用。
+python main.py config/config.yaml --web
 ```
+
+打开 http://127.0.0.1:8080，输入管理令牌。令牌只保留在当前页面内存，刷新页面需要重新登录。默认只监听本机；远程访问可加 `--web-host 0.0.0.0`，并在反向代理上配置 HTTPS。API 使用 `Authorization: Bearer <token>`；令牌至少 16 位，不写入 YAML。未加 `--web` 时保留原有纯监控启动方式。
+
+### Docker Compose
+
+```bash
+mkdir -p config logs data
+# 使用你自己的监控配置，或从 config/basic_example.yaml 复制后调整地址。
+# 容器使用 UID/GID 10001，需要配置目录可写以便原子替换配置和生成备份。
+sudo chown -R 10001:10001 config logs data
+python -c 'import secrets; print("HEALTH_MONITOR_WEB_TOKEN="+secrets.token_urlsafe(32))' > .env
+chmod 600 .env
+docker compose up -d --build
+```
+
+打开 http://localhost:8080，使用 `.env` 中的令牌登录。Compose 挂载可写配置目录和持久化 `data` 目录；不再自动启动示例数据库。已有部署请同步调整端口、令牌、目录权限与挂载，不能沿用 `:ro` 配置挂载。
+
+`docker run` 需要传入 `-e HEALTH_MONITOR_WEB_TOKEN`、`-p 8080:8080`，并挂载可写的 `/app/config` 和 `/app/data`。
+
+### 配置生效与预警历史
+
+- 保存前校验 YAML、服务参数和通知渠道；校验通过后备份为同目录 `config.yaml.bak`，原子替换文件并立即应用。备份与新配置仅文件所有者可读写。
+- 使用内容版本号防止多人编辑相互覆盖。发生冲突会保留编辑内容，需重新加载并整合修改后再保存。
+- 全局检查间隔、最大并发检查数、日志和通知渠道支持热更新。`state_file` 与 `enable_performance_monitoring` 变更需要修改文件并重启，在线编辑会阻止这两项变化。
+- 预警记录保存在 SQLite（默认 `data/events.sqlite3`，用 `--events-db` 修改），包含首次检查异常及后续异常/恢复，每次状态改变只记录一条，最多保留 10,000 条。记录代表检测事件，不等同于通知投递成功。
+- 历史从升级启用面板后开始积累，不回填旧日志。当前异常可在概览查看。通知仍沿用原有状态变化机制（首次检查不发送通知）。
+- 配置包含数据库密码与渠道密钥，所有配置 API 均需要管理令牌；`/health` 仅公开存活状态。
+- 依赖升级已将 Motor 替换为 PyMongo 官方异步 API，并适配 aiomqtt 的 `identifier` 参数。参考 [MongoDB 官方迁移说明](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/reference/migration/)。
+
+API：`GET /api/status`、`GET /api/alerts?service=&status=DOWN&limit=50&offset=0`、`GET /api/config`、`POST /api/config/validate`、`PUT /api/config`。配置校验请求体为 `{"content":"YAML文本"}`，保存时另附读取时的 `revision`。存活检查使用 `GET /health`。
+
+开发测试：`pip install -r requirements-dev.txt && pytest`。
 
 ## 🛠️ 开发指南
 
@@ -302,7 +187,7 @@ git clone https://github.com/hythzx/health-monitor.git
 cd health-monitor
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 # 运行测试
 pytest tests/
@@ -415,7 +300,7 @@ git push origin v1.1.0
 
 ## 🗺️ 路线图
 
-- [ ] Web管理界面
+- [x] Web管理界面
 - [ ] Prometheus指标导出
 - [ ] Grafana仪表板
 - [ ] 更多数据库支持
@@ -438,5 +323,5 @@ git push origin v1.1.0
 ```bash
 git clone https://github.com/hythzx/health-monitor.git
 cd health-monitor
-docker-compose up -d
+docker compose up -d --build
 ```
