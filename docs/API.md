@@ -792,3 +792,7 @@ def load_plugins():
 ```
 
 这样就可以通过插件的方式扩展系统功能，而不需要修改核心代码。
+
+### 连接池清理
+
+`ConnectionPoolManager` 的 MongoDB 连接池使用 `pymongo.AsyncMongoClient`。清理接口为异步方法，调用方需要使用 `await manager.remove_pool(pool_key)` 或 `await manager.cleanup_all_pools()`，以等待驱动释放连接。同步关闭方法也兼容。
