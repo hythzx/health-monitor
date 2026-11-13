@@ -80,7 +80,7 @@ class EMQXHealthChecker(BaseHealthChecker):
                     port=port,
                     username=username,
                     password=password,
-                    client_id=client_id,
+                    identifier=client_id,
                     timeout=self.get_timeout()
             ) as client:
                 connect_time = time.time() - start_time

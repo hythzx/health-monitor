@@ -50,7 +50,12 @@ class ConfigValidator:
         if not isinstance(alert_config, dict):
             raise ConfigError("告警配置必须是字典类型")
 
-        required_fields = ['name', 'type', 'url']
+        required_fields = ['name', 'type']
+        alert_type = alert_config.get('type')
+        if alert_type == 'http':
+            required_fields.append('url')
+        elif alert_type not in (None, 'email', 'aliyun_sms'):
+            raise ConfigError('告警类型不受支持')
         for field in required_fields:
             if field not in alert_config:
                 raise ConfigError(f"告警配置缺少必需的配置项: {field}")
@@ -81,3 +86,7 @@ class ConfigValidator:
             valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
             if log_level not in valid_levels:
                 raise ConfigError(f"log_level 必须是以下值之一: {valid_levels}")
+
+        concurrent = global_config.get('max_concurrent_checks', 10)
+        if type(concurrent) is not int or concurrent <= 0:
+            raise ConfigError("max_concurrent_checks 必须是正整数")

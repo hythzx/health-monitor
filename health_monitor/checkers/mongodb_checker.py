@@ -3,7 +3,8 @@
 import time
 from typing import Dict, Any, Optional
 
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
+from urllib.parse import quote_plus
 
 from .base import BaseHealthChecker
 from .factory import register_checker
@@ -23,7 +24,7 @@ class MongoHealthChecker(BaseHealthChecker):
             config: MongoDB配置
         """
         super().__init__(name, config)
-        self._client: Optional[AsyncIOMotorClient] = None
+        self._client: Optional[AsyncMongoClient] = None
 
     def validate_config(self) -> bool:
         """
@@ -49,12 +50,12 @@ class MongoHealthChecker(BaseHealthChecker):
 
         return True
 
-    def _get_client(self) -> AsyncIOMotorClient:
+    def _get_client(self) -> AsyncMongoClient:
         """
         获取MongoDB客户端实例
         
         Returns:
-            AsyncIOMotorClient: MongoDB客户端
+            AsyncMongoClient: MongoDB客户端
         """
         if self._client is None:
             host = self.config.get('host', 'localhost')
@@ -65,11 +66,11 @@ class MongoHealthChecker(BaseHealthChecker):
 
             # 构建连接URI
             if username and password:
-                uri = f"mongodb://{username}:{password}@{host}:{port}/{database}"
+                uri = f"mongodb://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}/{database}"
             else:
                 uri = f"mongodb://{host}:{port}/{database}"
 
-            self._client = AsyncIOMotorClient(
+            self._client = AsyncMongoClient(
                 uri,
                 serverSelectionTimeoutMS=self.get_timeout() * 1000,
                 connectTimeoutMS=self.get_timeout() * 1000,
@@ -203,7 +204,7 @@ class MongoHealthChecker(BaseHealthChecker):
             # 关闭连接
             if self._client:
                 try:
-                    self._client.close()
+                    await self._client.close()
                     self.logger.debug(f"MongoDB客户端连接已关闭: {self.name}")
                 except Exception as e:
                     self.logger.warning(f"关闭MongoDB客户端连接时出错: {e}")
@@ -231,7 +232,7 @@ class MongoHealthChecker(BaseHealthChecker):
         """关闭MongoDB连接"""
         if self._client:
             try:
-                self._client.close()
+                await self._client.close()
             except Exception:
                 pass
             self._client = None

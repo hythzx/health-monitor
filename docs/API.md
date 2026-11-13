@@ -2,6 +2,23 @@
 
 本文档描述了健康监控系统的内部API接口和扩展开发指南。
 
+## Web 管理 API（v1.1）
+
+使用 `--web` 启用。除首页、静态资源和 `/health` 外，均需请求头 `Authorization: Bearer <HEALTH_MONITOR_WEB_TOKEN>`。修改接口只接收 `application/json`，不开放跨域访问。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/health` | 存活状态，不返回配置 |
+| GET | `/api/status` | 服务名称、类型、健康状态与最后检查结果，响应时间单位为秒 |
+| GET | `/api/alerts` | 预警和恢复记录，返回 `total` 和 `items` |
+| GET | `/api/config` | YAML 原文 `content` 与内容哈希 `revision` |
+| POST | `/api/config/validate` | 校验 `{"content":"YAML文本"}`，不修改文件 |
+| PUT | `/api/config` | 保存 `{"content":"YAML文本","revision":"读取时的版本"}`，备份并热更新 |
+
+预警查询参数：`service`（服务名）、`status`（`DOWN` 或 `UP`）、`limit`（1—100，默认50）、`offset`（非负整数）。按最新发生顺序返回。历史代表检测事件，不能作为通知投递成功的证明。时间戳带时区偏移。
+
+保存失败时，校验错误返回400、未登录返回401、跨站修改返回403、版本冲突返回409、写入或应用错误返回500。应用失败会恢复上一份文件与运行配置。`state_file` 和 `enable_performance_monitoring` 需要重启，在线接口会拒绝变更。
+
 ## 目录
 
 - [核心接口](#核心接口)
@@ -775,3 +792,7 @@ def load_plugins():
 ```
 
 这样就可以通过插件的方式扩展系统功能，而不需要修改核心代码。
+
+### 连接池清理
+
+`ConnectionPoolManager` 的 MongoDB 连接池使用 `pymongo.AsyncMongoClient`。清理接口为异步方法，调用方需要使用 `await manager.remove_pool(pool_key)` 或 `await manager.cleanup_all_pools()`，以等待驱动释放连接。同步关闭方法也兼容。

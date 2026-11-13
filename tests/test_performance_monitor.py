@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timedelta
 
 from health_monitor.utils.performance_monitor import (
@@ -357,7 +357,7 @@ class TestConnectionPoolManager:
     
     def test_create_mongodb_pool(self, pool_manager):
         """测试创建MongoDB连接池"""
-        with patch('motor.motor_asyncio.AsyncIOMotorClient') as mock_client_class:
+        with patch('pymongo.AsyncMongoClient') as mock_client_class:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
             
@@ -398,7 +398,7 @@ class TestConnectionPoolManager:
         
         assert pool_manager.get_pool('test_pool') == mock_pool
     
-    def test_remove_pool(self, pool_manager):
+    async def test_remove_pool(self, pool_manager):
         """测试移除连接池"""
         # 添加模拟连接池
         mock_pool = Mock()
@@ -406,7 +406,7 @@ class TestConnectionPoolManager:
         pool_manager.pool_configs['test_pool'] = {'host': 'localhost'}
         
         # 移除连接池
-        pool_manager.remove_pool('test_pool')
+        await pool_manager.remove_pool('test_pool')
         
         assert 'test_pool' not in pool_manager.pools
         assert 'test_pool' not in pool_manager.pool_configs
@@ -431,7 +431,7 @@ class TestConnectionPoolManager:
         assert pool_stats['config']['host'] == 'localhost'
         assert pool_stats['config']['port'] == 6379
     
-    def test_cleanup_all_pools(self, pool_manager):
+    async def test_cleanup_all_pools(self, pool_manager):
         """测试清理所有连接池"""
         # 添加多个模拟连接池
         mock_pool1 = Mock()
@@ -441,7 +441,7 @@ class TestConnectionPoolManager:
         pool_manager.pool_configs['pool1'] = {}
         pool_manager.pool_configs['pool2'] = {}
         
-        pool_manager.cleanup_all_pools()
+        await pool_manager.cleanup_all_pools()
         
         assert len(pool_manager.pools) == 0
         assert len(pool_manager.pool_configs) == 0
@@ -449,3 +449,29 @@ class TestConnectionPoolManager:
         # 验证close方法被调用
         mock_pool1.close.assert_called_once()
         mock_pool2.close.assert_called_once()
+
+    async def test_mongodb_pool_real_driver_without_motor(self, pool_manager):
+        """Exercise the installed driver constructor and its async close without a server."""
+        from pymongo import AsyncMongoClient
+
+        client = pool_manager.create_mongodb_pool('mongo', {
+            'host': 'localhost', 'username': 'name@example.com', 'password': 'p:a/ss',
+        })
+        assert isinstance(client, AsyncMongoClient)
+        assert 'name%40example.com:p%3Aa%2Fss@' in pool_manager.pool_configs['mongo']['uri']
+        with patch.object(client, 'close', wraps=client.close) as close:
+            await pool_manager.cleanup_all_pools()
+            close.assert_awaited_once()
+        from pymongo.errors import InvalidOperation
+        with pytest.raises(InvalidOperation):
+            await client.admin.command('ping')
+        assert not pool_manager.pools
+        assert not pool_manager.pool_configs
+
+    async def test_remove_pool_awaits_async_disconnect(self, pool_manager):
+        pool = Mock(spec=['disconnect'])
+        pool.disconnect = AsyncMock()
+        pool_manager.pools['redis'] = pool
+        await pool_manager.remove_pool('redis')
+        pool.disconnect.assert_awaited_once()
+        assert 'redis' not in pool_manager.pools

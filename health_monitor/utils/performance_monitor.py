@@ -5,6 +5,8 @@
 
 import asyncio
 import logging
+import inspect
+from urllib.parse import quote_plus
 from collections import deque
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
@@ -421,7 +423,7 @@ class ConnectionPoolManager:
             MongoDB客户端对象
         """
         try:
-            from motor.motor_asyncio import AsyncIOMotorClient
+            from pymongo import AsyncMongoClient
 
             # 构建连接URI
             host = config.get('host', 'localhost')
@@ -431,7 +433,7 @@ class ConnectionPoolManager:
             database = config.get('database', 'test')
 
             if username and password:
-                uri = f"mongodb://{username}:{password}@{host}:{port}/{database}"
+                uri = f"mongodb://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}/{database}"
             else:
                 uri = f"mongodb://{host}:{port}/{database}"
 
@@ -442,7 +444,7 @@ class ConnectionPoolManager:
                 'connectTimeoutMS': config.get('timeout', 10) * 1000
             }
 
-            client = AsyncIOMotorClient(uri, **client_config)
+            client = AsyncMongoClient(uri, **client_config)
             self.pools[pool_key] = client
             self.pool_configs[pool_key] = {'uri': uri, **client_config}
 
@@ -450,7 +452,7 @@ class ConnectionPoolManager:
             return client
 
         except ImportError:
-            self.logger.error("motor库未安装，无法创建MongoDB连接池")
+            self.logger.error("pymongo库未安装，无法创建MongoDB连接池")
             raise
         except Exception as e:
             self.logger.error(f"创建MongoDB连接池失败: {e}")
@@ -467,7 +469,7 @@ class ConnectionPoolManager:
         """
         return self.pools.get(pool_key)
 
-    def remove_pool(self, pool_key: str):
+    async def remove_pool(self, pool_key: str):
         """移除连接池
         
         Args:
@@ -479,9 +481,13 @@ class ConnectionPoolManager:
             # 尝试关闭连接池
             try:
                 if hasattr(pool, 'close'):
-                    pool.close()
+                    result = pool.close()
                 elif hasattr(pool, 'disconnect'):
-                    pool.disconnect()
+                    result = pool.disconnect()
+                else:
+                    result = None
+                if inspect.isawaitable(result):
+                    await result
             except Exception as e:
                 self.logger.warning(f"关闭连接池 {pool_key} 时出现异常: {e}")
 
@@ -521,11 +527,11 @@ class ConnectionPoolManager:
 
         return stats
 
-    def cleanup_all_pools(self):
+    async def cleanup_all_pools(self):
         """清理所有连接池"""
         pool_keys = list(self.pools.keys())
         for pool_key in pool_keys:
-            self.remove_pool(pool_key)
+            await self.remove_pool(pool_key)
 
         self.logger.info("清理所有连接池完成")
 

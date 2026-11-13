@@ -62,7 +62,7 @@ class TestPerformanceBenchmark:
         # 收集性能数据
         results = []
         
-        def collect_result(result: HealthCheckResult):
+        async def collect_result(result: HealthCheckResult):
             results.append(result)
         
         scheduler.set_check_result_callback(collect_result)
@@ -119,7 +119,7 @@ class TestPerformanceBenchmark:
         # 收集性能数据
         results = []
         
-        def collect_result(result: HealthCheckResult):
+        async def collect_result(result: HealthCheckResult):
             results.append(result)
         
         scheduler.set_check_result_callback(collect_result)
@@ -175,69 +175,30 @@ class TestPerformanceBenchmark:
     
     @pytest.mark.asyncio
     async def test_concurrent_limit_performance(self):
-        """测试并发限制的性能影响"""
-        # 测试不同并发限制下的性能
-        concurrent_limits = [1, 3, 5, 10]
-        results_by_limit = {}
-        
-        for limit in concurrent_limits:
-            scheduler = MonitorScheduler(max_concurrent_checks=limit)
-            
-            # 创建20个服务
-            service_count = 20
-            for i in range(service_count):
-                service_name = f'service_{i}'
-                checker = MockHealthChecker(service_name, {'type': 'mock'}, delay=0.1)
-                scheduler.checkers[service_name] = checker
-                scheduler.check_intervals[service_name] = 1  # 1秒间隔
-            
-            # 收集结果
+        """Compare identical completed batches, without polling-interval boundary noise."""
+        throughputs = {}
+        for limit in (1, 3, 5, 10):
+            scheduler = MonitorScheduler(max_concurrent_checks=limit,
+                                         enable_performance_monitoring=False)
+            scheduler.semaphore = asyncio.Semaphore(limit)
             results = []
-            
-            def collect_result(result: HealthCheckResult):
+
+            async def collect_result(result):
                 results.append(result)
-            
+
             scheduler.set_check_result_callback(collect_result)
-            
-            # 运行5秒
-            start_time = time.time()
-            scheduler_task = asyncio.create_task(scheduler.start())
-            
-            await asyncio.sleep(5)
-            await scheduler.stop()
-            scheduler_task.cancel()
-            
-            try:
-                await scheduler_task
-            except asyncio.CancelledError:
-                pass
-            
-            # 统计结果
-            total_time = time.time() - start_time
-            total_checks = len(results)
-            throughput = total_checks / total_time if total_time > 0 else 0
-            
-            results_by_limit[limit] = {
-                'total_checks': total_checks,
-                'total_time': total_time,
-                'throughput': throughput,
-                'avg_response_time': statistics.mean([r.response_time for r in results]) if results else 0
-            }
-        
-        # 分析不同并发限制的性能
-        print(f"\n并发限制性能对比:")
-        print(f"{'并发限制':<8} {'总检查数':<8} {'吞吐量(次/秒)':<12} {'平均响应时间(秒)':<15}")
-        print("-" * 50)
-        
-        for limit in concurrent_limits:
-            stats = results_by_limit[limit]
-            print(f"{limit:<8} {stats['total_checks']:<8} {stats['throughput']:<12.2f} {stats['avg_response_time']:<15.3f}")
-        
-        # 验证并发限制的效果
-        # 更高的并发限制应该带来更高的吞吐量（在一定范围内）
-        assert results_by_limit[5]['throughput'] > results_by_limit[1]['throughput']
-        assert results_by_limit[10]['throughput'] >= results_by_limit[5]['throughput']
-    
+            for index in range(20):
+                name = f'service_{index}'
+                scheduler.checkers[name] = MockHealthChecker(name, {'type': 'mock'}, delay=0.1)
+            started = time.perf_counter()
+            await asyncio.gather(*(scheduler._check_service(name) for name in scheduler.checkers))
+            elapsed = time.perf_counter() - started
+            assert len(results) == 20
+            throughputs[limit] = len(results) / elapsed
+
+        assert throughputs[5] > throughputs[1]
+        assert throughputs[10] > throughputs[5]
+
     @pytest.mark.asyncio
     async def test_performance_monitor_overhead(self):
         """测试性能监控的开销"""
@@ -261,7 +222,7 @@ class TestPerformanceBenchmark:
             # 收集结果
             results = []
             
-            def collect_result(result: HealthCheckResult):
+            async def collect_result(result: HealthCheckResult):
                 results.append(result)
             
             scheduler.set_check_result_callback(collect_result)
@@ -336,7 +297,7 @@ class TestPerformanceBenchmark:
         
         memory_samples = [initial_memory]
         
-        def collect_result(result: HealthCheckResult):
+        async def collect_result(result: HealthCheckResult):
             # 每10次检查记录一次内存使用
             if len(memory_samples) % 10 == 0:
                 current_memory = process.memory_info().rss / 1024 / 1024
@@ -434,7 +395,7 @@ class TestPerformanceBenchmark:
         results = []
         errors = []
         
-        def collect_result(result: HealthCheckResult):
+        async def collect_result(result: HealthCheckResult):
             results.append(result)
         
         def collect_error(service_name: str, error: Exception):

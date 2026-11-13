@@ -80,9 +80,8 @@ class MonitorScheduler:
         default_interval = global_config.get('check_interval', 30)
 
         # 清空现有配置
-        self.checkers.clear()
-        self.check_intervals.clear()
-        self.last_check_times.clear()
+        checkers = {}
+        intervals = {}
 
         # 创建健康检查器
         for service_name, service_config in services_config.items():
@@ -90,14 +89,14 @@ class MonitorScheduler:
                 # 创建检查器
                 checker = health_checker_factory.create_checker(service_name,
                                                                 service_config)
-                self.checkers[service_name] = checker
+                checkers[service_name] = checker
 
                 # 设置检查间隔
                 check_interval = service_config.get('check_interval', default_interval)
                 if not isinstance(check_interval, int) or check_interval <= 0:
                     raise ConfigError(f"服务 {service_name} 的检查间隔必须是正整数")
 
-                self.check_intervals[service_name] = check_interval
+                intervals[service_name] = check_interval
 
                 self.logger.info(
                     f"配置服务 {service_name}: 类型={service_config.get('type')}, 间隔={check_interval}秒")
@@ -105,6 +104,10 @@ class MonitorScheduler:
             except Exception as e:
                 self.logger.error(f"配置服务 {service_name} 失败: {e}")
                 raise
+
+        self.checkers = checkers
+        self.check_intervals = intervals
+        self.last_check_times.clear()
 
     def set_check_result_callback(self, callback: Callable[
         [HealthCheckResult], Awaitable[None]]):
@@ -268,6 +271,8 @@ class MonitorScheduler:
 
                 # 执行健康检查
                 result = await checker.check_health()
+                if self.checkers.get(service_name) is not checker:
+                    return
 
                 # 更新最后检查时间
                 self.last_check_times[service_name] = start_time
